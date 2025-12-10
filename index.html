@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roll an Aura</title>
+    <title>Roll an Aura Incremental</title>
     <style>
         body {
             background-color: #1a1a1a;
@@ -483,7 +483,7 @@
     </audio>
 
     <h1>⭐ Roll an Aura ⭐</h1>
-    <p>Total Auras: 23 (v2.8). Shard Upgrades moved to Power Shop!</p>
+    <p>Total Auras: 23 (v2.9.1). Clear Game Data pop-up restored.</p>
 
     <div id="status-area">
         <div>Current Luck: <span id="luck-display" class="luck-boost">1x</span></div>
@@ -617,8 +617,8 @@
         const BASE_REBIRTH_COST = 1000000;
         const POWER_BONUS = 2;
 
-        // Storage keys updated for v2.8
-        const VERSION_KEY = 'v2_8';
+        // Storage keys updated for v2.9.1
+        const VERSION_KEY = 'v2_9_1';
         const MONEY_STORAGE_KEY = `aura_money_${VERSION_KEY}`;
         const SHARDS_STORAGE_KEY = `aura_shards_${VERSION_KEY}`;
         const SHARD_MULT_STORAGE_KEY = `aura_shard_mult_${VERSION_KEY}`;
@@ -899,7 +899,6 @@
                 effectFn();
                 saveStats();
                 updateMoneyDisplay();
-                alert(`SUCCESS! Upgrade purchased: ${type.replace(/-/g, ' ')}.`);
             }
         }
 
@@ -908,8 +907,6 @@
             const COST = 50000;
             if (money < COST) return;
             
-            if (!confirm(`Are you sure you want to spend 💰${COST.toLocaleString()} for a guaranteed high-rarity Aura?`)) return;
-
             money -= COST;
             saveStats();
             updateMoneyDisplay();
@@ -921,22 +918,28 @@
             const result = highRarityAuras[Math.floor(Math.random() * highRarityAuras.length)];
             
             // 3. Roll for bonus
-            let bonusMessage = "";
             let coinBonus = 0;
 
             if (Math.random() < 0.10) { // 10% chance for a huge bonus
                 coinBonus = 200000;
                 money += coinBonus;
                 saveStats();
-                bonusMessage = `\n\n🎉 BONUS! You won 💰${coinBonus.toLocaleString()}!`;
             }
 
-            // 4. Display Result
-            alert(`Box opened! You received the ${result.rarity} Aura: "${result.name}"` + bonusMessage);
+            // 4. Display Result - Will be visible in the main display/inventory
             
             // Add to collection and inventory
             saveAuraToCollection(result.name);
             addToInventory(result);
+            
+            // Use the main display to show the Mystery Box result temporarily
+            getButton('aura-name').innerText = result.name;
+            getButton('aura-name').className = result.class;
+            getButton('aura-rarity').innerHTML = `MYSTERY BOX! ${result.rarity} Found!`;
+            
+            if (coinBonus > 0) {
+                 getButton('aura-rarity').innerHTML += `<br> +💰${coinBonus.toLocaleString()} BONUS!`;
+            }
         }
 
 
@@ -959,15 +962,14 @@
             // Apply shard multiplier
             const finalShards = totalShards * shardMultiplier;
 
-            if (confirm(`Are you sure you want to sell all ${inventory.length} items for a total of 💰${totalValue.toLocaleString()} and 💎${finalShards} Shards?`)) {
-                money += totalValue;
-                shards += finalShards;
-                inventory = []; 
-                saveStats();
-                saveInventory();
-                updateMoneyDisplay();
-                renderInventory(); 
-            }
+            // Execute sell instantly
+            money += totalValue;
+            shards += finalShards;
+            inventory = []; 
+            saveStats();
+            saveInventory();
+            updateMoneyDisplay();
+            renderInventory(); 
         }
         // --- END SELLING LOGIC UPDATE ---
 
@@ -975,12 +977,14 @@
         // --- LTA ROTATION LOGIC ---
         function determineActiveLimitedAura() {
             const now = new Date();
+            // Note: In JavaScript, getDay() returns 0 for Sunday, 1 for Monday, etc.
             const localDay = now.getDay(); 
+            const dayOfWeek = localDay === 0 ? 7 : localDay; // Treat Sunday as Day 7 for a 1-7 rotation
 
-            // Simplified logic: LTA rotates daily. 0=Sun, 1=Mon, ..., 6=Sat
-            if (localDay === 1 || localDay === 2) { 
+            // Simplified logic: LTA rotates daily.
+            if (dayOfWeek === 1 || dayOfWeek === 2) { 
                 activeLimitedAura = limitedAuras[0]; // Seasonal Spook (Mythical)
-            } else if (localDay === 3 || localDay === 4) { 
+            } else if (dayOfWeek === 3 || dayOfWeek === 4) { 
                 activeLimitedAura = limitedAuras[1]; // Holiday Hype (Divine)
             } else { 
                 activeLimitedAura = limitedAuras[2]; // Summer Chill (Cosmic)
@@ -1136,7 +1140,8 @@
         function doRebirth() {
             if (money < getRebirthCost()) return;
             
-            if (confirm(`Are you sure you want to Rebirth? This will reset your coins, speed upgrades, inventory, and shards, but you will gain 1 Power and permanently multiply your income by ${POWER_BONUS}x!`)) {
+            // KEEPING THE CONFIRMATION FOR THE MOST IMPORTANT RESET
+            if (confirm(`Are you sure you want to Rebirth? This will reset your coins, speed upgrades, inventory, and luck boosts, but you will gain 1 Power and permanently multiply your income by ${(powerMultiplier * POWER_BONUS).toFixed(1)}x!`)) {
                 
                 power += 1;
                 calculatePowerMultiplier();
@@ -1144,8 +1149,9 @@
                 
                 // Reset resources, but use the permanent start money upgrade
                 money = rebirthStartMoney; 
+                // Note: Shard Upgrades themselves (rebirthStartT1Purchased, rareBonusLuck) are not reset, only the shard currency.
                 shards = 0;
-                shardMultiplier = 1;
+                shardMultiplier = 1; 
                 autoRollSpeed = 1000;
                 speedLevel = 0;
                 inventory = [];
@@ -1153,21 +1159,17 @@
                 saveStats(); // Saves money, shards, and shard upgrades
                 saveSpeed();
                 saveInventory();
-                
-                updateMoneyDisplay();
-                updatePowerDisplay();
-                
-                alert(`SUCCESS! You are now Power ${power} with a total income multiplier of ${powerMultiplier.toFixed(1)}x!`);
             }
         }
 
-
+        // --- RESTORED CONFIRMATION POP-UP FOR GAME RESET ---
         function resetGame() {
-            if (confirm("Are you sure you want to reset ALL game progress? This cannot be undone. This also clears old version data.")) {
+            if (confirm("🚨 WARNING: Are you absolutely sure you want to clear ALL game data (Money, Shards, Power, Collection)? This action is irreversible!")) {
                 localStorage.clear();
                 window.location.reload();
             }
         }
+        // ---------------------------------------------------
 
         function renderSpeedShop() {
             const shopEl = getButton('speed-upgrades');
@@ -1188,7 +1190,7 @@
                     btn.textContent = `${upgrade.label} - Cost: 💰${upgrade.cost.toLocaleString()}`;
                     btn.onclick = () => buySpeedUpgrade(upgrade);
                     
-                    if (money < upgrade.cost) {
+                    if (money < upgrade.cost || upgrade.id !== speedLevel + 1) {
                         btn.disabled = true;
                     }
                 }
@@ -1207,6 +1209,7 @@
                 saveSpeed(); 
                 updateMoneyDisplay(); 
                 
+                // If auto-roll is active, stop and restart it to apply the new speed
                 if (autoRollInterval) {
                     toggleAutoRoll(); 
                     toggleAutoRoll();
