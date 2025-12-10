@@ -243,7 +243,7 @@
         }
         
         /* Shop & Rebirth Styles */
-        #speed-shop h2, #luck-shop h2, #power-shop h2, #loot-shop h2 {
+        #speed-shop h2, #luck-shop h2, #power-shop h2, #loot-shop h2, #collection-tab h2 {
             margin-top: 0;
             color: #ffcc00;
             border-bottom: 1px solid #555;
@@ -383,9 +383,8 @@
 
         /* Checklist Styles */
         .checklist {
-            margin-top: 40px;
-            border-top: 2px dashed #555;
-            padding-top: 20px;
+            margin-top: 20px;
+            padding-top: 10px;
         }
 
         #uncollected-list {
@@ -483,7 +482,7 @@
     </audio>
 
     <h1>⭐ Roll an Aura ⭐</h1>
-    <p>Total Auras: 23 (v2.9.1). Clear Game Data pop-up restored.</p>
+    <p>Total Auras: 23 (v2.9.2). Collection tab added.</p>
 
     <div id="status-area">
         <div>Current Luck: <span id="luck-display" class="luck-boost">1x</span></div>
@@ -511,6 +510,7 @@
         <button class="tab-button" onclick="openTab('loot-shop', this)" id="loot-tab">🎁 Coin Sink</button>
         <button class="tab-button" onclick="openTab('speed-shop', this)" id="speed-tab">⚡ Speed Shop</button>
         <button class="tab-button" onclick="openTab('power-shop', this)" id="power-tab">🔥 Power & Rebirth</button>
+        <button class="tab-button" onclick="openTab('collection-tab', this)" id="collection-tab-btn">📚 Collection</button>
     </div>
 
     <div id="tab-content-container">
@@ -584,20 +584,22 @@
             </div>
         </div>
         
-    </div>
-    <div class="checklist">
-        <h2>📋 AURA CHECKLIST</h2>
-        <div id="uncollected-list">
+        <div id="collection-tab" class="tab-content">
+            <div class="checklist">
+                <h2>📋 AURA CHECKLIST</h2>
+                <div id="uncollected-list">
+                    </div>
             </div>
-    </div>
 
-    <div class="inventory">
-        <h2>🎒 STOLEN COLLECTION (Latest First)</h2>
-        <button id="sell-all-btn" onclick="sellAllItems()">SELL ALL ITEMS</button>
-        <div class="item-list" id="inventory-list">
+            <div class="inventory">
+                <h2>🎒 STOLEN COLLECTION (Latest First)</h2>
+                <button id="sell-all-btn" onclick="sellAllItems()">SELL ALL ITEMS</button>
+                <div class="item-list" id="inventory-list">
+                    </div>
             </div>
+        </div>
+        
     </div>
-
     <button id="reset-btn" onclick="resetGame()">🚨 RESET GAME DATA 🚨</button>
 
     <script>
@@ -617,8 +619,8 @@
         const BASE_REBIRTH_COST = 1000000;
         const POWER_BONUS = 2;
 
-        // Storage keys updated for v2.9.1
-        const VERSION_KEY = 'v2_9_1';
+        // Storage keys updated for v2.9.2
+        const VERSION_KEY = 'v2_9_2';
         const MONEY_STORAGE_KEY = `aura_money_${VERSION_KEY}`;
         const SHARDS_STORAGE_KEY = `aura_shards_${VERSION_KEY}`;
         const SHARD_MULT_STORAGE_KEY = `aura_shard_mult_${VERSION_KEY}`;
@@ -1021,7 +1023,6 @@
                 tablinks[i].classList.remove('active');
             }
 
-            // Note: The Rebirth tab is now the 'power-shop' tab
             document.getElementById(tabName).classList.add('active');
             elmnt.classList.add('active');
         }
@@ -1159,6 +1160,10 @@
                 saveStats(); // Saves money, shards, and shard upgrades
                 saveSpeed();
                 saveInventory();
+                
+                updateMoneyDisplay();
+                updatePowerDisplay();
+                renderSpeedShop();
             }
         }
 
