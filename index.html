@@ -174,7 +174,7 @@
             cursor: not-allowed !important;
         }
 
-        /* --- New Shop Section Styling --- */
+        /* --- Shop Section Styling --- */
         #shop-container {
             margin-top: 30px;
             border: 2px solid #555;
@@ -222,6 +222,41 @@
             cursor: not-allowed !important;
         }
 
+        /* --- Rebirth Section Styling --- */
+        #rebirth-container {
+            margin-top: 30px;
+            border: 3px solid #ffaa00;
+            border-radius: 10px;
+            padding: 20px 10px;
+            background: #3a2828;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        #rebirth-btn {
+            background: linear-gradient(45deg, #ff4500, #cc0000);
+            box-shadow: 0 8px 0 #992a00;
+            color: white;
+            font-size: 1.5rem;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.1s;
+            margin-top: 10px;
+        }
+
+        #rebirth-btn:active {
+            transform: translateY(8px);
+            box-shadow: 0 0 0 #992a00;
+        }
+
+        #rebirth-btn:disabled {
+            background: #555 !important;
+            box-shadow: 0 8px 0 #333 !important;
+            cursor: not-allowed !important;
+        }
 
         /* --- RARITY COLORS --- */
         .common {
@@ -377,11 +412,12 @@
     </audio>
 
     <h1>⭐ Roll an Aura ⭐</h1>
-    <p>Total Auras: 20 (v2.1). Speed Upgrades added!</p>
+    <p>Total Auras: 20 (v2.2). Rebirth System added!</p>
 
     <div id="status-area">
         <div>Current Luck: <span id="luck-display" class="luck-boost">1x</span></div>
         <div>💰 Coins: <span id="money-display" style="color: gold; font-weight: bold;">0</span></div>
+        <div>⚡ Power: <span id="power-display" style="color: red; font-weight: bold;">0</span></div>
         <div>Collected: <span id="collected-count">0</span>/20</div>
     </div>
 
@@ -406,6 +442,12 @@
         <div id="speed-upgrades">
             </div>
     </div>
+    <div id="rebirth-container">
+        <h2>🔥 REBIRTH 🔥</h2>
+        <p>Current Income Multiplier: <span id="income-mult-display" style="color: lime; font-weight: bold;">1.0x</span></p>
+        <p id="rebirth-cost-display">Reach 💰1,000,000 to Rebirth.</p>
+        <button id="rebirth-btn" onclick="doRebirth()" disabled>REBIRTH NOW</button>
+    </div>
     <div class="checklist">
         <h2>📋 AURA CHECKLIST</h2>
         <div id="uncollected-list">
@@ -426,12 +468,17 @@
         let money = 0;
         let autoRollSpeed = 1000; // Default 1000ms
         let speedLevel = 0; // Current speed upgrade level
-        
+        let power = 0; // NEW: Rebirth currency
+        let powerMultiplier = 1; // NEW: Income multiplier
+        const BASE_REBIRTH_COST = 1000000; // 1 Million coins
+        const POWER_BONUS = 2; // Each power doubles (2x) income
+
         // Storage keys
-        const MONEY_STORAGE_KEY = 'aura_money_v2_1';
-        const SPEED_STORAGE_KEY = 'aura_speed_v2_1';
-        const COLLECTION_STORAGE_KEY = 'aura_collection_v2_1';
-        const INVENTORY_STORAGE_KEY = 'aura_inventory_v2_1';
+        const MONEY_STORAGE_KEY = 'aura_money_v2_2';
+        const SPEED_STORAGE_KEY = 'aura_speed_v2_2';
+        const POWER_STORAGE_KEY = 'aura_power_v2_2'; // NEW
+        const COLLECTION_STORAGE_KEY = 'aura_collection_v2_2';
+        const INVENTORY_STORAGE_KEY = 'aura_inventory_v2_2';
 
         const auras = [
             // Added value: How much money this aura is worth when stolen
@@ -489,12 +536,24 @@
             return document.getElementById(id);
         }
 
-        // --- Money and Speed Persistence ---
+        // --- Money, Power, and Speed Persistence ---
+
+        function calculatePowerMultiplier() {
+            // Power multiplier is POWER_BONUS (2) raised to the power level
+            powerMultiplier = Math.pow(POWER_BONUS, power);
+        }
+
         function updateMoneyDisplay() {
             getButton('money-display').textContent = money.toLocaleString();
-            // Crucial: Update boost button visibility/state whenever money changes
             updateLuckDisplay(); 
-            renderSpeedShop(); // Also refresh speed shop buttons
+            renderSpeedShop(); 
+            updateRebirthDisplay(); // NEW
+        }
+        
+        function updatePowerDisplay() {
+            getButton('power-display').textContent = power.toLocaleString();
+            getButton('income-mult-display').textContent = `${powerMultiplier.toFixed(1)}x`;
+            updateRebirthDisplay();
         }
 
         function loadMoney() {
@@ -509,14 +568,24 @@
         function saveMoney() {
             localStorage.setItem(MONEY_STORAGE_KEY, money.toString());
         }
+        
+        function loadPower() {
+            const storedPower = localStorage.getItem(POWER_STORAGE_KEY);
+            if (storedPower !== null) {
+                power = parseInt(storedPower);
+            }
+            calculatePowerMultiplier();
+        }
+        
+        function savePower() {
+            localStorage.setItem(POWER_STORAGE_KEY, power.toString());
+        }
 
         function loadSpeed() {
             const storedSpeed = localStorage.getItem(SPEED_STORAGE_KEY);
             if (storedSpeed !== null) {
-                // Stored value is the resulting speed (ms)
                 autoRollSpeed = parseInt(storedSpeed);
                 
-                // Determine the current speed level from the autoRollSpeed
                 let currentLevel = 0;
                 speedUpgrades.forEach(upgrade => {
                     if (upgrade.speed === autoRollSpeed) {
@@ -530,14 +599,16 @@
         function saveSpeed() {
             localStorage.setItem(SPEED_STORAGE_KEY, autoRollSpeed.toString());
         }
-        // --- End Money and Speed Persistence ---
+        // --- End Money, Power, and Speed Persistence ---
 
 
         // --- Initialization and Storage ---
         document.addEventListener('DOMContentLoaded', () => {
             loadMoney();
-            loadSpeed(); // Load speed settings
+            loadSpeed(); 
+            loadPower(); // NEW: Load power
             updateMoneyDisplay();
+            updatePowerDisplay(); // NEW: Update power display
             loadCollection();
             loadInventory(); 
 
@@ -551,7 +622,8 @@
             renderChecklist();
             updateCollectedCount();
             renderInventory(); 
-            renderSpeedShop(); // Render speed shop on load
+            renderSpeedShop(); 
+            updateRebirthDisplay(); // NEW
         });
 
         function loadCollection() {
@@ -623,7 +695,6 @@
                 const div = document.createElement('div');
                 div.className = "inv-item";
 
-                // Look up the full aura object to get class and rarity
                 const fullAura = auras.find(a => a.name === item.name);
                 const itemClass = fullAura ? fullAura.class : '';
                 const itemRarity = fullAura ? fullAura.rarity : 'Unknown';
@@ -632,7 +703,6 @@
                 list.appendChild(div);
             });
 
-            // Update the sell button text to show how many items can be sold
             const sellBtn = getButton('sell-all-btn');
             sellBtn.textContent = `SELL ALL ITEMS (${inventory.length})`;
         }
@@ -642,28 +712,82 @@
 
             let totalValue = 0;
             
-            // Calculate total value
+            // Calculate total value based on original value * power multiplier
             inventory.forEach(item => {
-                totalValue += item.value;
+                totalValue += Math.floor(item.value * powerMultiplier);
             });
 
             if (confirm(`Are you sure you want to sell all ${inventory.length} items for a total of 💰${totalValue.toLocaleString()}?`)) {
                 money += totalValue;
-                inventory = []; // Clear inventory array
+                inventory = []; 
                 saveMoney();
                 saveInventory();
                 updateMoneyDisplay();
-                renderInventory(); // Update the display
+                renderInventory(); 
             }
         }
 
+        function getRebirthCost() {
+            // Cost scales by the current power level (e.g., 1M, 2M, 4M, 8M, etc.)
+            return BASE_REBIRTH_COST * Math.pow(POWER_BONUS, power);
+        }
+
+        function updateRebirthDisplay() {
+            const costDisplay = getButton('rebirth-cost-display');
+            const rebirthBtn = getButton('rebirth-btn');
+            const cost = getRebirthCost();
+            
+            getButton('income-mult-display').textContent = `${powerMultiplier.toFixed(1)}x`;
+
+            if (money >= cost) {
+                costDisplay.innerHTML = `You can afford the Rebirth! Get ⚡ ${power + 1} for a total of ⚡${power + 1} Power.`;
+                rebirthBtn.disabled = false;
+                rebirthBtn.textContent = `REBIRTH NOW (Cost: 💰${cost.toLocaleString()})`;
+            } else {
+                costDisplay.innerHTML = `Next Rebirth Cost: 💰${cost.toLocaleString()} (Need 💰${(cost - money).toLocaleString()} more)`;
+                rebirthBtn.disabled = true;
+                rebirthBtn.textContent = `REBIRTH NOW`;
+            }
+        }
+        
+        function doRebirth() {
+            if (money < getRebirthCost()) return;
+            
+            if (confirm(`Are you sure you want to Rebirth? This will reset your coins, speed upgrades, and inventory, but you will gain 1 Power and permanently multiply your income by ${POWER_BONUS}x!`)) {
+                
+                // 1. Gain Power
+                power += 1;
+                calculatePowerMultiplier();
+                savePower();
+                
+                // 2. Reset relevant variables
+                money = 500; // Give starting cash
+                autoRollSpeed = 1000;
+                speedLevel = 0;
+                inventory = [];
+                
+                // 3. Save Resets
+                saveMoney();
+                saveSpeed(); // Resets stored speed
+                saveInventory();
+                
+                // 4. Update displays (which calls all render functions)
+                updateMoneyDisplay();
+                updatePowerDisplay();
+                
+                alert(`SUCCESS! You are now Power ${power} with a total income multiplier of ${powerMultiplier.toFixed(1)}x!`);
+            }
+        }
+
+
         function resetGame() {
-            if (confirm("Are you sure you want to reset ALL game progress (collection, money, and cooldowns)? This cannot be undone.")) {
+            if (confirm("Are you sure you want to reset ALL game progress? This cannot be undone.")) {
                 // Clear all stored data
                 localStorage.removeItem(COLLECTION_STORAGE_KEY);
                 localStorage.removeItem(INVENTORY_STORAGE_KEY);
                 localStorage.removeItem(MONEY_STORAGE_KEY);
-                localStorage.removeItem(SPEED_STORAGE_KEY); // Reset Speed too!
+                localStorage.removeItem(SPEED_STORAGE_KEY);
+                localStorage.removeItem(POWER_STORAGE_KEY); // Reset Power too!
 
                 // Stop any running cooldown timers
                 for (const timerId in cooldownTimers) {
@@ -686,7 +810,6 @@
                 const btn = document.createElement('button');
                 btn.className = 'upgrade-btn';
                 
-                // Determine state
                 const isPurchased = upgrade.id <= speedLevel;
 
                 if (isPurchased) {
@@ -697,7 +820,6 @@
                     btn.textContent = `${upgrade.label} - Cost: 💰${upgrade.cost.toLocaleString()}`;
                     btn.onclick = () => buySpeedUpgrade(upgrade);
                     
-                    // Disable if too poor
                     if (money < upgrade.cost) {
                         btn.disabled = true;
                     }
@@ -708,21 +830,16 @@
 
         function buySpeedUpgrade(upgrade) {
             if (money >= upgrade.cost && upgrade.id === speedLevel + 1) {
-                // Deduct money
                 money -= upgrade.cost;
                 
-                // Apply upgrade
                 speedLevel = upgrade.id;
                 autoRollSpeed = upgrade.speed;
 
-                // Save and refresh
                 saveMoney();
                 saveSpeed(); 
-                updateMoneyDisplay(); // This calls renderSpeedShop()
+                updateMoneyDisplay(); 
                 
-                // If auto rolling, restart the interval immediately to apply speed change
                 if (autoRollInterval) {
-                    // This will stop the old, slow interval and start the new, fast one
                     toggleAutoRoll(); 
                     toggleAutoRoll();
                 }
@@ -730,9 +847,8 @@
         }
 
 
-        // --- Other Game Functions ---
+        // --- Rolling and Luck Functions ---
 
-        // Function to format seconds into minutes:seconds:hours
         const formatTime = (totalSeconds) => {
             if (totalSeconds < 60) return `${totalSeconds}s`;
             if (totalSeconds < 3600) {
@@ -752,31 +868,27 @@
 
             const boost = boostButtons.find(b => b.id === id);
 
-            // 1. Check if this specific boost is currently active
             if (currentMultiplier === boost.mult) {
                 btn.disabled = true;
                 btn.innerHTML = `BOOST ACTIVE<br>(${rollsLeft} Rolls)`;
                 btn.classList.add('active-boost');
                 btn.classList.remove('disabled-boost');
             }
-            // 2. Check for cooldown
             else if (timeRemaining > 0) {
                 btn.disabled = true;
                 btn.innerHTML = `COOLDOWN<br>(${formatTime(timeRemaining)})`;
                 btn.classList.add('disabled-boost');
                 btn.classList.remove('active-boost');
             }
-            // 3. Check for money availability
-            else if (money < cost) {
+            else if (money < boost.cost) {
                 btn.disabled = true;
-                btn.innerHTML = `${name}<br>(Cost: 💰${cost.toLocaleString()}) <span style="color:red;">(TOO POOR)</span>`;
+                btn.innerHTML = `${name}<br>(Cost: 💰${boost.cost.toLocaleString()}) <span style="color:red;">(TOO POOR)</span>`;
                 btn.classList.add('disabled-boost');
                 btn.classList.remove('active-boost');
             }
-            // 4. Available to buy 
             else {
                 btn.disabled = false;
-                btn.innerHTML = `${name}<br>(Cost: 💰${cost.toLocaleString()})`;
+                btn.innerHTML = `${name}<br>(Cost: 💰${boost.cost.toLocaleString()})`;
                 btn.classList.remove('disabled-boost');
                 btn.classList.remove('active-boost');
             }
@@ -795,7 +907,6 @@
                 luckDisplayEl.className = 'luck-boost';
             }
 
-            // Update all boost button states
             boostButtons.forEach(b => {
                 updateBoostButtonDisplay(b.id, b.name, b.cost, cooldowns[b.id], luckMultiplier);
             });
@@ -810,7 +921,6 @@
 
             const timer = setInterval(() => {
                 cooldowns[boostId]--;
-                // Update specific button display only if it's in cooldown
                 if (luckMultiplier !== boostButtons.find(b => b.id === boostId).mult) {
                     updateBoostButtonDisplay(boostId, boostButtons.find(b => b.id === boostId).name, boostButtons.find(b => b.id === boostId).cost, cooldowns[boostId], luckMultiplier);
                 }
@@ -819,7 +929,7 @@
                     clearInterval(timer);
                     delete cooldownTimers[boostId];
                     cooldowns[boostId] = 0;
-                    updateLuckDisplay(); // Refresh all buttons
+                    updateLuckDisplay(); 
                 }
             }, 1000);
 
@@ -832,12 +942,10 @@
             if (luckMultiplier > 1 || cooldowns[boost.id] > 0) return;
             if (money < boost.cost) return;
 
-            // DEDUCT MONEY
             money -= boost.cost;
             saveMoney();
             updateMoneyDisplay(); 
 
-            // ACTIVATE BOOST
             luckMultiplier = multiplier;
             rollsLeft = boost.rolls;
 
@@ -861,8 +969,8 @@
             let maxTicks = 10;
             const rollMoney = 10; 
 
-            // Grant money per roll
-            money += rollMoney;
+            // NEW: Grant money per roll, multiplied by powerMultiplier
+            money += Math.floor(rollMoney * powerMultiplier);
             saveMoney();
             updateMoneyDisplay();
 
@@ -916,21 +1024,24 @@
 
             if (!result) result = auras[0];
 
-            money += result.value;
+            // NEW: Add the aura's base value, multiplied by powerMultiplier
+            const coinGain = Math.floor(result.value * powerMultiplier);
+            money += coinGain;
             saveMoney();
             updateMoneyDisplay();
 
-            displayResult(result);
+            displayResult(result, coinGain);
             saveAuraToCollection(result.name);
         }
 
-        function displayResult(item) {
+        function displayResult(item, coinGain) {
             const nameEl = getButton('aura-name');
             const rarityEl = getButton('aura-rarity');
 
             nameEl.innerText = item.name;
             nameEl.className = item.class;
-            rarityEl.innerHTML = `1 in ${item.chance} • ${item.rarity}<br>+💰${item.value.toLocaleString()} from steal`;
+            // Display the actual coin gain
+            rarityEl.innerHTML = `1 in ${item.chance} • ${item.rarity}<br>+💰${coinGain.toLocaleString()} from steal`;
 
             if (item.chance >= 50) {
                 document.body.classList.add("flash");
@@ -941,9 +1052,10 @@
         }
 
         function addToInventory(item) {
+            // Store the item's name and BASE value for selling later
             inventory.unshift({
                 name: item.name,
-                value: item.value
+                value: item.value // Store the base value (pre-multiplier)
             });
 
             saveInventory();
@@ -961,7 +1073,6 @@
                 autoBtn.innerText = "AUTO ROLL";
                 manualBtn.disabled = false;
 
-                // Stop music and throttle prevention
                 const musicElement = getButton('bg-music');
                 const throttleElement = getButton('throttle-preventer');
                 if (musicElement) { musicElement.pause(); musicElement.currentTime = 0; }
@@ -973,7 +1084,6 @@
                 manualBtn.disabled = true;
                 autoBtn.innerText = "STOP AUTO ROLL";
 
-                // Start music and throttle prevention
                 const musicElement = getButton('bg-music');
                 const throttleElement = getButton('throttle-preventer');
                 if (musicElement) musicElement.play().catch(e => console.error("Music Autoplay prevented:", e));
