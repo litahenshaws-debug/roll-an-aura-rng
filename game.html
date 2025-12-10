@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>STEAL A BRAIN ROT: RNG EDITION</title>
+	<style>
+		body {
+			background-color: #1a1a1a;
+			color: white;
+			font-family: 'Verdana', sans-serif;
+			text-align: center;
+			margin: 0;
+			padding: 20px;
+			overflow-x: hidden;
+			user-select: none;
+		}
+
+		h1 {
+			font-family: 'Comic Sans MS', cursive;
+			text-shadow: 4px 4px 0px #ff00ff;
+			font-size: 3rem;
+			margin-bottom: 10px;
+		}
+
+		/* The Main Display Area */
+		#display-area {
+			border: 4px solid white;
+			border-radius: 15px;
+			background: #333;
+			height: 200px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			margin: 20px auto;
+			max-width: 600px;
+			transition: all 0.2s;
+			box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+		}
+
+		#aura-name {
+			font-size: 2.5rem;
+			font-weight: bold;
+			text-transform: uppercase;
+		}
+
+		#aura-rarity {
+			font-size: 1.2rem;
+			margin-top: 10px;
+			font-style: italic;
+		}
+
+		/* Styling for both buttons */
+		.btn {
+			border: none;
+			padding: 20px 50px;
+			font-size: 2rem;
+			color: white;
+			font-weight: bold;
+			border-radius: 10px;
+			cursor: pointer;
+			transition: transform 0.1s, box-shadow 0.1s;
+			font-family: 'Impact', sans-serif;
+		}
+
+		/* Manual Roll Button Style */
+		#roll-btn {
+			background: linear-gradient(45deg, #ff0000, #ff8800);
+			box-shadow: 0 8px 0 #880000;
+		}
+
+		#roll-btn:active {
+			transform: translateY(8px);
+			box-shadow: 0 0 0 #880000;
+		}
+
+		/* Auto Roll Button Style */
+		#auto-roll-btn {
+			background: linear-gradient(45deg, #00ffff, #0088ff);
+			box-shadow: 0 8px 0 #0055aa;
+			margin-left: 10px;
+			color: black;
+		}
+
+		#auto-roll-btn:active {
+			transform: translateY(8px);
+			box-shadow: 0 0 0 #0055aa;
+		}
+
+		#roll-btn:disabled,
+		#auto-roll-btn:disabled {
+			background: gray !important;
+			box-shadow: 0 8px 0 #333 !important;
+			cursor: not-allowed !important;
+		}
+
+		/* Inventory Section */
+		.inventory {
+			margin-top: 40px;
+			border-top: 2px dashed #555;
+			padding-top: 20px;
+		}
+
+		.item-list {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+			gap: 10px;
+		}
+
+		.inv-item {
+			background: #222;
+			padding: 10px;
+			border-radius: 5px;
+			border: 1px solid #555;
+			width: 120px;
+			font-size: 0.8rem;
+		}
+
+		/* Rarity Colors & Animations */
+		.common {
+			color: #ffffff;
+			text-shadow: 0 0 5px #ffffff;
+		}
+
+		.uncommon {
+			color: #00ff00;
+			text-shadow: 0 0 5px #00ff00;
+		}
+
+		.rare {
+			color: #0088ff;
+			text-shadow: 0 0 10px #0088ff;
+		}
+
+		.epic {
+			color: #aa00ff;
+			text-shadow: 0 0 15px #aa00ff;
+		}
+
+		.legendary {
+			color: #ffaa00;
+			text-shadow: 0 0 20px #ffaa00;
+			animation: shake 0.5s infinite;
+		}
+
+		.mythical {
+			background: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet);
+			-webkit-background-clip: text;
+			color: transparent;
+			font-size: 3rem !important;
+			animation: rainbow-spin 2s linear infinite;
+		}
+
+		@keyframes shake {
+			0% {
+				transform: translate(1px, 1px);
+			}
+
+			50% {
+				transform: translate(-1px, -1px);
+			}
+
+			100% {
+				transform: translate(1px, 1px);
+			}
+		}
+
+		@keyframes rainbow-spin {
+			0% {
+				filter: hue-rotate(0deg);
+				transform: scale(1);
+			}
+
+			50% {
+				transform: scale(1.1);
+			}
+
+			100% {
+				filter: hue-rotate(360deg);
+				transform: scale(1);
+			}
+		}
+
+		/* Flash Effect for high tier */
+		.flash {
+			animation: screen-flash 0.5s;
+		}
+
+		@keyframes screen-flash {
+			0% {
+				background-color: white;
+			}
+
+			100% {
+				background-color: #1a1a1a;
+			}
+		}
+	</style>
+</head>
+
+<body>
+
+	<h1>🎲 ROLL AN AURA 🎲</h1>
+	<p>Total Auras in the game: 12. Good luck stealing a Mythical!</p>
+  <p>Version 1.3</p>
+
+	<div id="display-area">
+		<div id="aura-name">???</div>
+		<div id="aura-rarity">Click button to steal</div>
+	</div>
+
+	<br>
+
+	<button id="roll-btn" class="btn" onclick="rollAura(false)">STEAL!</button>
+	<button id="auto-roll-btn" class="btn" onclick="toggleAutoRoll()">AUTO ROLL</button>
+
+	<div class="inventory">
+		<h2>🎒 STOLEN COLLECTION</h2>
+		<div class="item-list" id="inventory-list">
+		</div>
+	</div>
+
+	<script>
+		// THE DATA: List of Brain Rots and their chance (1 in X)
+        const auras = [
+            // COMMON (EASIEST)
+            { name: "NPC Energy", rarity: "Common", chance: 2, class: "common" },
+            { name: "Low Taper Fade", rarity: "Common", chance: 3, class: "common" },
+            // UNCOMMON
+            { name: "Just a Chill Guy", rarity: "Uncommon", chance: 5, class: "uncommon" },
+            { name: "Bombastic Side Eye", rarity: "Uncommon", chance: 8, class: "uncommon" },
+            // RARE
+            { name: "Grimace Shake", rarity: "Rare", chance: 15, class: "rare" },
+            { name: "Skibidi Toilet", rarity: "Rare", chance: 25, class: "rare" },
+            // EPIC
+            { name: "Fanum Tax", rarity: "Epic", chance: 50, class: "epic" },
+            { name: "6-7 BRAIN ROT", rarity: "Epic", chance: 80, class: "epic" }, // <-- THE NEW AURA
+            { name: "Ohio Final Boss", rarity: "Epic", chance: 80, class: "epic" },
+            // LEGENDARY
+            { name: "SIGMA GIGACHAD", rarity: "LEGENDARY", chance: 200, class: "legendary" },
+            { name: "MAXIMUM RIZZLER", rarity: "LEGENDARY", chance: 500, class: "legendary" },
+            // MYTHICAL (HARDEST)
+            { name: "✨ DEEMEETREE ✨", rarity: "MYTHICAL", chance: 1000, class: "mythical" }
+        ];
+
+        let isRolling = false;
+        let autoRollInterval = null;
+
+        async function rollAura(isAuto) {
+            if (isRolling) return;
+            isRolling = true;
+            
+            const btn = document.getElementById('roll-btn');
+            
+            if (!isAuto) {
+                btn.disabled = true;
+                btn.innerText = "STEALING...";
+            }
+            
+            const nameEl = document.getElementById('aura-name');
+            const rarityEl = document.getElementById('aura-rarity');
+            let ticks = 0;
+            let maxTicks = 10;
+            
+            await new Promise(resolve => {
+                let interval = setInterval(() => {
+                    let randomTemp = auras[Math.floor(Math.random() * auras.length)];
+                    nameEl.innerText = randomTemp.name;
+                    nameEl.className = ""; 
+                    rarityEl.innerText = "...";
+                    ticks++;
+
+                    if (ticks >= maxTicks) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 100);
+            });
+            
+            finalizeRoll();
+
+            isRolling = false;
+            if (!isAuto) {
+                btn.disabled = false;
+                btn.innerText = "STEAL AGAIN";
+            }
+        }
+
+        function finalizeRoll() {
+            const rand = Math.floor(Math.random() * 1000) + 1;
+            let result = null;
+
+            const sortedAuras = [...auras].sort((a, b) => b.chance - a.chance);
+
+            for (let aura of sortedAuras) {
+                let threshold = 1000 / aura.chance;
+                if (Math.random() * 1000 <= threshold) {
+                    result = aura;
+                    break;
+                }
+            }
+            
+            if (!result) result = auras[0];
+            displayResult(result);
+        }
+
+        function displayResult(item) {
+            const nameEl = document.getElementById('aura-name');
+            const rarityEl = document.getElementById('aura-rarity');
+
+            nameEl.innerText = item.name;
+            nameEl.className = item.class;
+            rarityEl.innerText = `1 in ${item.chance} • ${item.rarity}`;
+
+            if (item.chance >= 50) {
+                document.body.classList.add("flash");
+                setTimeout(() => document.body.classList.remove("flash"), 500);
+            }
+
+            addToInventory(item);
+        }
+
+        function addToInventory(item) {
+            const list = document.getElementById('inventory-list');
+            const div = document.createElement('div');
+            div.className = "inv-item";
+            div.innerHTML = `<strong class="${item.class}">${item.name}</strong><br>${item.rarity}`;
+            
+            list.insertBefore(div, list.firstChild);
+        }
+        
+        function toggleAutoRoll() {
+            const autoBtn = document.getElementById('auto-roll-btn');
+            const manualBtn = document.getElementById('roll-btn');
+
+            if (autoRollInterval) {
+                clearInterval(autoRollInterval);
+                autoRollInterval = null;
+                autoBtn.innerText = "AUTO ROLL";
+                manualBtn.disabled = false;
+            } else {
+                manualBtn.disabled = true;
+                autoBtn.innerText = "STOP AUTO ROLL";
+                
+                autoRollInterval = setInterval(() => {
+                    rollAura(true); 
+                }, 1000);
+            }
+        }
+	</script>
+
+</body>
+
+</html>
