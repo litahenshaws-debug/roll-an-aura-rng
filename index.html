@@ -214,7 +214,7 @@
             color: white !important;
         }
         
-        /* Speed Shop Content Styles */
+        /* Shop & Rebirth Styles */
         #speed-shop h2, #luck-shop h2, #rebirth-shop h2 {
             margin-top: 0;
             color: #ffcc00;
@@ -253,11 +253,6 @@
             cursor: not-allowed !important;
         }
 
-        /* Rebirth Shop Content Styles */
-        #rebirth-shop {
-            background: #333; /* Inherits from .tab-content */
-        }
-        
         #rebirth-btn {
             background: linear-gradient(45deg, #ff4500, #cc0000);
             box-shadow: 0 8px 0 #992a00;
@@ -432,7 +427,7 @@
     </audio>
 
     <h1>⭐ Roll an Aura ⭐</h1>
-    <p>Total Auras: 20 (v2.4). Collected count fixed!</p>
+    <p>Total Auras: 20 (v2.5). Limited-Time Aura Rotation Added!</p>
 
     <div id="status-area">
         <div>Current Luck: <span id="luck-display" class="luck-boost">1x</span></div>
@@ -445,9 +440,12 @@
         <div id="aura-name">???</div>
         <div id="aura-rarity">Click button to steal</div>
     </div>
-
-    <br>
-
+    
+    <div id="limited-aura-status" style="margin: 20px auto; padding: 15px; border: 2px solid #9933ff; border-radius: 10px; background: #222; max-width: 600px;">
+        <div id="limited-aura-display" style="font-size: 1.2rem; color: white;">
+            Checking for Limited-Time Aura...
+        </div>
+    </div>
     <button id="roll-btn" class="btn" onclick="rollAura(false)">STEAL!</button>
     <button id="auto-roll-btn" class="btn" onclick="toggleAutoRoll()">AUTO ROLL</button>
     
@@ -507,13 +505,14 @@
         const BASE_REBIRTH_COST = 1000000;
         const POWER_BONUS = 2;
 
-        // Storage keys updated for v2.4
-        const MONEY_STORAGE_KEY = 'aura_money_v2_4';
-        const SPEED_STORAGE_KEY = 'aura_speed_v2_4';
-        const POWER_STORAGE_KEY = 'aura_power_v2_4';
-        const COLLECTION_STORAGE_KEY = 'aura_collection_v2_4';
-        const INVENTORY_STORAGE_KEY = 'aura_inventory_v2_4';
+        // Storage keys updated for v2.5
+        const MONEY_STORAGE_KEY = 'aura_money_v2_5';
+        const SPEED_STORAGE_KEY = 'aura_speed_v2_5';
+        const POWER_STORAGE_KEY = 'aura_power_v2_5';
+        const COLLECTION_STORAGE_KEY = 'aura_collection_v2_5';
+        const INVENTORY_STORAGE_KEY = 'aura_inventory_v2_5';
 
+        // --- CORE AURA LIST ---
         const auras = [
             { name: "NPC Energy", rarity: "Common", chance: 2, class: "common", value: 50 },
             { name: "Low Taper Fade", rarity: "Common", chance: 3, class: "common", value: 60 },
@@ -536,6 +535,18 @@
             { name: "Sigma Chad", rarity: "COSMIC", chance: 5000, class: "cosmic", value: 50000 },
             { name: "Big Back", rarity: "COSMIC", chance: 5000, class: "cosmic", value: 75000 }
         ];
+
+        // --- LIMITED TIME AURA (LTA) LIST ---
+        const limitedAuras = [
+            // Rotates Mon/Tue
+            { name: "Seasonal Spook", rarity: "MYTHICAL (LTD)", chance: 1500, class: "mythical", value: 30000, id: 1 }, 
+            // Rotates Wed/Thu
+            { name: "Holiday Hype", rarity: "DIVINE (LTD)", chance: 3000, class: "divine", value: 50000, id: 2 }, 
+            // Rotates Fri/Sat/Sun
+            { name: "Summer Chill", rarity: "COSMIC (LTD)", chance: 7500, class: "cosmic", value: 100000, id: 3 } 
+        ];
+
+        let activeLimitedAura = null;
 
         const speedUpgrades = [
             { id: 1, cost: 10000, speed: 750, label: "Fast Roll (750ms)" },
@@ -569,21 +580,54 @@
             return document.getElementById(id);
         }
 
+        // --- LTA ROTATION LOGIC ---
+        function determineActiveLimitedAura() {
+            const now = new Date();
+            // Using PST time (Wednesday, Dec 10, 2025 at 3:29 PM) for calculation consistency
+            const localDay = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+            if (localDay === 1 || localDay === 2) { // Monday, Tuesday
+                activeLimitedAura = limitedAuras[0];
+            } else if (localDay === 3 || localDay === 4) { // Wednesday, Thursday
+                activeLimitedAura = limitedAuras[1];
+            } else { // Friday, Saturday, Sunday (weekend special)
+                activeLimitedAura = limitedAuras[2];
+            }
+            
+            // Calculate time until midnight tonight/tomorrow morning
+            const midnight = new Date(now);
+            midnight.setDate(now.getDate() + 1); // Move to tomorrow
+            midnight.setHours(0, 0, 0, 0); // Set time to midnight
+            
+            const timeUntilRotation = midnight.getTime() - now.getTime();
+            
+            const rotationHours = Math.floor(timeUntilRotation / (1000 * 60 * 60));
+            const rotationMinutes = Math.floor((timeUntilRotation % (1000 * 60 * 60)) / (1000 * 60));
+
+            // Update display
+            const limitedDisplay = getButton('limited-aura-display');
+            limitedDisplay.innerHTML = `**ACTIVE LTA:** <span class="${activeLimitedAura.class}">${activeLimitedAura.name}</span> (${activeLimitedAura.rarity}) <br> *Time Remaining: ${rotationHours}h ${rotationMinutes}m*`;
+        }
+
+        function getAurasForRolling() {
+            // Include all core auras plus the currently active limited aura
+            return [...auras, activeLimitedAura];
+        }
+        // --- END LTA ROTATION LOGIC ---
+
+
         // --- Tab Control Function ---
         function openTab(tabName, elmnt) {
-            // Hide all elements with class="tab-content"
             const tabcontent = document.getElementsByClassName("tab-content");
             for (let i = 0; i < tabcontent.length; i++) {
                 tabcontent[i].classList.remove('active');
             }
 
-            // Remove the "active" class from all tab buttons
             const tablinks = document.getElementsByClassName("tab-button");
             for (let i = 0; i < tablinks.length; i++) {
                 tablinks[i].classList.remove('active');
             }
 
-            // Show the current tab, and add an "active" class to the button that opened the tab
             document.getElementById(tabName).classList.add('active');
             elmnt.classList.add('active');
         }
@@ -666,11 +710,14 @@
             boostButtons.forEach(b => {
                 cooldowns[b.id] = 0;
             });
+            
+            // LTA Setup
+            determineActiveLimitedAura();
 
             // Render initial displays
             updateLuckDisplay();
             renderChecklist();
-            updateCollectedCount(); // Corrected function will display fixed format
+            updateCollectedCount();
             renderInventory(); 
             renderSpeedShop(); 
             updateRebirthDisplay(); 
@@ -710,12 +757,10 @@
             localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory));
         }
 
-        // --- FIX IS HERE ---
         function updateCollectedCount() {
-            // Fixes the issue where it was displaying 0/20/20 by only using the count and total
-            getButton('collected-count').textContent = `${collectedAuras.size}/${auras.length}`;
+            // Fixed display format
+            getButton('collected-count').textContent = `${collectedAuras.size}/${auras.length + limitedAuras.length}`;
         }
-        // --- END FIX ---
 
         function saveAuraToCollection(auraName) {
             if (!collectedAuras.has(auraName)) {
@@ -730,7 +775,9 @@
             const listEl = getButton('uncollected-list');
             listEl.innerHTML = '';
 
-            auras.forEach(aura => {
+            const allAurasForChecklist = [...auras, ...limitedAuras].sort((a, b) => b.chance - a.chance);
+
+            allAurasForChecklist.forEach(aura => {
                 const div = document.createElement('div');
                 div.className = "uncollected-item";
 
@@ -747,11 +794,14 @@
              const list = getButton('inventory-list');
              list.innerHTML = '';
 
+             // Create a combined list of all possible auras for lookup
+             const allAuras = [...auras, ...limitedAuras];
+
              inventory.forEach(item => {
                 const div = document.createElement('div');
                 div.className = "inv-item";
 
-                const fullAura = auras.find(a => a.name === item.name);
+                const fullAura = allAuras.find(a => a.name === item.name);
                 const itemClass = fullAura ? fullAura.class : '';
                 const itemRarity = fullAura ? fullAura.rarity : 'Unknown';
 
@@ -1021,9 +1071,11 @@
             saveMoney();
             updateMoneyDisplay();
 
+            const auraList = getAurasForRolling();
+
             await new Promise(resolve => {
                 let interval = setInterval(() => {
-                    let randomTemp = auras[Math.floor(Math.random() * auras.length)];
+                    let randomTemp = auraList[Math.floor(Math.random() * auraList.length)];
                     nameEl.innerText = randomTemp.name;
                     nameEl.className = "";
                     rarityEl.innerText = "...";
@@ -1057,8 +1109,9 @@
 
         function finalizeRoll() {
             let result = null;
+            const currentAuraList = getAurasForRolling();
 
-            const sortedAuras = [...auras].sort((a, b) => b.chance - a.chance);
+            const sortedAuras = [...currentAuraList].sort((a, b) => b.chance - a.chance);
 
             for (let aura of sortedAuras) {
                 let threshold = (1000 / aura.chance) * luckMultiplier;
@@ -1069,7 +1122,7 @@
                 }
             }
 
-            if (!result) result = auras[0];
+            if (!result) result = auras[0]; // Default back to Common if everything fails
 
             const coinGain = Math.floor(result.value * powerMultiplier);
             money += coinGain;
