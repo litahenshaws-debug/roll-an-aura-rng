@@ -497,7 +497,7 @@
     </audio>
 
     <h1>⭐ Roll an Aura ⭐</h1>
-    <p>Total Auras: 23 (v2.9.9). Now with **Seasonal LTAs**.</p>
+    <p>Total Auras: 23 (v2.9.9.1). **Button Fixed**.</p>
 
     <div id="status-area">
         <div>Current Luck: <span id="luck-display" class="luck-boost">1x</span></div>
@@ -647,8 +647,8 @@
         
         let isAutoSelling = false;
 
-        // Storage keys updated for v2.9.9
-        const VERSION_KEY = 'v2_9_9';
+        // Storage keys updated for v2.9.9.1
+        const VERSION_KEY = 'v2_9_9_1';
         const MONEY_STORAGE_KEY = `aura_money_${VERSION_KEY}`;
         const SHARDS_STORAGE_KEY = `aura_shards_${VERSION_KEY}`;
         const SHARD_MULT_STORAGE_KEY = `aura_shard_mult_${VERSION_KEY}`;
@@ -1313,7 +1313,8 @@
                 tabcontent.classList.remove('active');
                 activeTabName = null;
                 
-                if (!autoRollInterval) {
+                // Only re-enable if Auto-Roll is off
+                if (!autoRollInterval) { 
                      manualBtn.disabled = false;
                      manualBtn.innerText = "STEAL!";
                 }
@@ -1555,7 +1556,7 @@
             const btn = getButton(id);
             if (!btn) return;
 
-            const boost = boostButtons.find(b => b.mult === multiplier);
+            const boost = boostButtons.find(b => b.id === id); // Find by ID
 
             if (currentMultiplier === boost.mult && rollsLeft > 0) {
                 btn.disabled = true;
@@ -1614,6 +1615,7 @@
                 saveBoostState(); 
                 
                 const boostDetails = boostButtons.find(b => b.id === boostId);
+                // Only update the display if this boost isn't the active one (which is handled by updateLuckDisplay)
                 if (luckMultiplier !== boostDetails.mult) {
                     updateBoostButtonDisplay(boostId, boostDetails.name, boostDetails.cost, cooldowns[boostId], luckMultiplier);
                 }
@@ -1648,16 +1650,16 @@
         }
 
         async function rollAura(isAuto) {
+            // FIX: If the button is already disabled because a roll is processing, exit.
+            // This prevents duplicate execution when the user rapid-clicks.
             if (isRolling) return;
             isRolling = true;
 
             const btn = getButton('roll-btn');
 
-            if (!isAuto || autoRollInterval) { 
+            if (!isAuto) { 
                 btn.disabled = true;
-                if (!isAuto) {
-                    btn.innerText = "STEALING...";
-                }
+                btn.innerText = "STEALING...";
             }
 
 
@@ -1674,7 +1676,8 @@
             const auraList = getAurasForRolling();
 
             // Only run the visible animation if on a tab that allows it (or no tab is active)
-            if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
+            // AND if it's not an auto-roll.
+            if (!isAuto && (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null)) {
                 await new Promise(resolve => {
                     let interval = setInterval(() => {
                         let randomTemp = auraList[Math.floor(Math.random() * auraList.length)];
@@ -1690,13 +1693,15 @@
                     }, 100);
                 });
             } else {
-                 await new Promise(resolve => setTimeout(resolve, 100));
+                 // For auto-roll or hidden tabs, run a quick hidden delay
+                 await new Promise(resolve => setTimeout(resolve, isAuto ? 10 : 100));
             }
 
             finalizeRoll();
 
             isRolling = false;
             
+            // FIX: Ensure the manual roll button is re-enabled if auto-roll is not active.
             if (!autoRollInterval) {
                 btn.disabled = false;
                 btn.innerText = "STEAL AGAIN";
@@ -1746,6 +1751,7 @@
                 }
             }
 
+            // Ensure a result is always found (defaults to the first Common if all else fails)
             if (!result) result = auras[0];
 
             const coinGain = Math.floor(result.value * powerMultiplier);
@@ -1756,13 +1762,14 @@
                 money += coinGain;
                 shards += shardGain;
                 
+                // FIX: Make sure the display updates for auto-sold items even if on a game-relevant tab.
                 if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
                     displayResult(result, coinGain, true); // Pass 'true' for auto-sold
                 }
             } else {
                 money += coinGain;
                 
-                if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
+                 if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
                     displayResult(result, coinGain, false);
                 }
                 addToInventory(result);
@@ -1823,8 +1830,11 @@
                 clearInterval(autoRollInterval);
                 autoRollInterval = null;
                 autoBtn.innerText = "AUTO ROLL";
-                manualBtn.disabled = false;
-                manualBtn.innerText = "STEAL AGAIN";
+                // Only re-enable manual button if we are NOT viewing a non-rolling tab
+                if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
+                    manualBtn.disabled = false;
+                    manualBtn.innerText = "STEAL AGAIN";
+                }
                 
                 if (throttleElement) { throttleElement.pause(); throttleElement.currentTime = 0; }
                 
