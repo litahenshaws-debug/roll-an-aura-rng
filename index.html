@@ -123,11 +123,11 @@
         /* --- TAB UI STYLES --- */
         #tabs-container {
             max-width: 800px;
-            margin: 30px auto 0px; /* Reduced bottom margin */
+            margin: 30px auto 0px; 
             border-bottom: 2px solid #555;
             display: flex;
             justify-content: center;
-            flex-wrap: wrap; /* Added for responsiveness */
+            flex-wrap: wrap; 
         }
 
         .tab-button {
@@ -141,7 +141,7 @@
             font-weight: bold;
             border-radius: 8px 8px 0 0;
             transition: background 0.1s;
-            margin-bottom: -2px; /* Pulls button slightly down over the border */
+            margin-bottom: -2px; 
         }
 
         .tab-button:hover {
@@ -152,7 +152,7 @@
             background: #333;
             color: #ffcc00;
             border-color: #ffcc00;
-            border-bottom: 2px solid #333; /* Hides the bottom border of the tab container */
+            border-bottom: 2px solid #333; 
         }
         
         .tab-content {
@@ -162,13 +162,10 @@
             padding: 20px 10px;
             max-width: 800px;
             margin: 0 auto;
-            /* Default hidden */
             display: none;
-            /* Added margin-bottom to make space when content is visible */
             margin-bottom: 20px; 
         }
 
-        /* This is the key change for the toggle functionality */
         .tab-content.active {
             display: block;
         }
@@ -323,7 +320,7 @@
         }
         
         .uncommon-shade {
-            color: #008800; /* Darker shade for text contrast */
+            color: #008800; 
         }
 
         .rare {
@@ -439,9 +436,8 @@
         }
 
         /* Sell Button Style */
-        #sell-all-btn {
-            background: linear-gradient(45deg, #00aa00, #00cc00);
-            box-shadow: 0 5px 0 #006600;
+        .inventory-btn {
+            box-shadow: 0 5px 0;
             font-size: 1rem;
             padding: 10px 20px;
             color: white;
@@ -449,13 +445,31 @@
             border-radius: 5px;
             cursor: pointer;
             transition: transform 0.1s;
-            margin-bottom: 10px;
+            margin: 5px;
         }
 
-        #sell-all-btn:active {
+        .inventory-btn:active {
             transform: translateY(5px);
-            box-shadow: 0 0 0 #006600;
+            box-shadow: 0 0 0;
         }
+
+        #sell-all-btn {
+            background: linear-gradient(45deg, #00aa00, #00cc00);
+            box-shadow: 0 5px 0 #006600;
+        }
+        
+        #auto-sell-btn {
+            background: linear-gradient(45deg, #ffcc00, #ffaa00);
+            box-shadow: 0 5px 0 #cc8800;
+            color: black;
+        }
+
+        #auto-sell-btn.active-sell {
+             background: linear-gradient(45deg, #ff4500, #cc0000);
+             box-shadow: 0 5px 0 #992a00;
+             color: white;
+        }
+
 
         #reset-btn {
             margin-top: 30px;
@@ -479,11 +493,11 @@
 <body>
 
     <audio id="throttle-preventer" loop muted>
-        <source src="TEST_One minute of silence (ID 0917)_BSB" type="audio/wav"> 
+        <source src="YOUR_BGM_FILE_URL_HERE" type="audio/mp3"> 
     </audio>
 
     <h1>⭐ Roll an Aura ⭐</h1>
-    <p>Total Auras: 23 (v2.9.5). Auto-roll now continues when tabs are open (Requires a valid audio file in the HTML).</p>
+    <p>Total Auras: 23 (v2.9.7). Now with **Offline Progression** and **Auto-Sell**.</p>
 
     <div id="status-area">
         <div>Current Luck: <span id="luck-display" class="luck-boost">1x</span></div>
@@ -597,7 +611,15 @@
         <div id="inventory-tab" class="tab-content">
              <div class="inventory">
                 <h2>🎒 STOLEN COLLECTION (Latest First)</h2>
-                <button id="sell-all-btn" onclick="sellAllItems()">SELL ALL ITEMS</button>
+                
+                <div style="margin-bottom: 10px;">
+                    <button id="sell-all-btn" class="inventory-btn" onclick="sellAllItems()">SELL ALL ITEMS</button>
+                    
+                    <button id="auto-sell-btn" class="inventory-btn" onclick="toggleAutoSell()">
+                        AUTO SELL: OFF
+                    </button>
+                </div>
+                
                 <div class="item-list" id="inventory-list">
                     </div>
             </div>
@@ -611,10 +633,10 @@
         let money = 0;
         let shards = 0;
         let shardMultiplier = 1;
-        let rebirthStartMoney = 500; // Base money after rebirth
+        let rebirthStartMoney = 500; 
         let rebirthStartT1Purchased = false;
         let rebirthStartT2Purchased = false;
-        let rareBonusLuck = 0; // The new multiplier for rare/uncommon chances
+        let rareBonusLuck = 0; 
         
         let autoRollSpeed = 1000;
         let speedLevel = 0;
@@ -622,9 +644,12 @@
         let powerMultiplier = 1;
         const BASE_REBIRTH_COST = 1000000;
         const POWER_BONUS = 2;
+        
+        // --- NEW AUTO-SELL STATE ---
+        let isAutoSelling = false;
 
-        // Storage keys updated for v2.9.5
-        const VERSION_KEY = 'v2_9_5';
+        // Storage keys updated for v2.9.7
+        const VERSION_KEY = 'v2_9_7';
         const MONEY_STORAGE_KEY = `aura_money_${VERSION_KEY}`;
         const SHARDS_STORAGE_KEY = `aura_shards_${VERSION_KEY}`;
         const SHARD_MULT_STORAGE_KEY = `aura_shard_mult_${VERSION_KEY}`;
@@ -635,6 +660,11 @@
         const POWER_STORAGE_KEY = `aura_power_${VERSION_KEY}`;
         const COLLECTION_STORAGE_KEY = `aura_collection_${VERSION_KEY}`;
         const INVENTORY_STORAGE_KEY = `aura_inventory_${VERSION_KEY}`;
+        const LAST_SAVE_TIME_KEY = `aura_last_save_time_${VERSION_KEY}`;
+        
+        // --- NEW AUTO-SELL STORAGE KEY ---
+        const AUTO_SELL_KEY = `aura_auto_sell_${VERSION_KEY}`;
+
 
         // --- CORE AURA LIST ---
         const auras = [
@@ -689,7 +719,7 @@
         let luckMultiplier = 1;
         let rollsLeft = 0;
         let cooldowns = {};
-        let activeTabName = 'luck-shop'; // Track the currently active tab content ID
+        let activeTabName = 'luck-shop'; 
         
         // Collection Tracking
         let collectedAuras = new Set();
@@ -723,8 +753,9 @@
             updateLuckDisplay(); 
             renderSpeedShop(); 
             updateRebirthDisplay(); 
-            renderLootShop(); // Coin Sink Check
-            renderPowerShop(); // Shard Upgrades Check
+            renderLootShop(); 
+            renderPowerShop(); 
+            updateAutoSellButton();
         }
 
         function loadStats() {
@@ -732,10 +763,13 @@
             shards = parseInt(localStorage.getItem(SHARDS_STORAGE_KEY) || 0);
             shardMultiplier = parseInt(localStorage.getItem(SHARD_MULT_STORAGE_KEY) || 1);
             
-            // NEW SHARD UPGRADES LOADING
+            // SHARD UPGRADES LOADING
             rebirthStartT1Purchased = localStorage.getItem(REBIRTH_START_T1_KEY) === 'true';
             rebirthStartT2Purchased = localStorage.getItem(REBIRTH_START_T2_KEY) === 'true';
             rareBonusLuck = parseFloat(localStorage.getItem(RARE_BONUS_KEY) || 0);
+            
+            // AUTO-SELL LOADING
+            isAutoSelling = localStorage.getItem(AUTO_SELL_KEY) === 'true';
 
             // Calculate starting money
             rebirthStartMoney = 500;
@@ -748,10 +782,13 @@
             localStorage.setItem(SHARDS_STORAGE_KEY, shards.toString());
             localStorage.setItem(SHARD_MULT_STORAGE_KEY, shardMultiplier.toString());
             
-            // NEW SHARD UPGRADES SAVING
+            // SHARD UPGRADES SAVING
             localStorage.setItem(REBIRTH_START_T1_KEY, rebirthStartT1Purchased.toString());
             localStorage.setItem(REBIRTH_START_T2_KEY, rebirthStartT2Purchased.toString());
             localStorage.setItem(RARE_BONUS_KEY, rareBonusLuck.toString());
+            
+            // AUTO-SELL SAVING
+            localStorage.setItem(AUTO_SELL_KEY, isAutoSelling.toString());
         }
         
         function loadPower() {
@@ -768,7 +805,6 @@
         }
         
         function updateCollectedCount() {
-            // Correct total: core auras + all limited auras
             getButton('collected-count').textContent = `${collectedAuras.size}/${auras.length + limitedAuras.length}`;
         }
         
@@ -786,6 +822,21 @@
         function saveInventory() {
             localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory));
         }
+        
+        // --- NEW: Record Time on Exit ---
+        window.addEventListener('beforeunload', () => {
+            // Only record the time if the game has started
+            if (money > 0) {
+                localStorage.setItem(LAST_SAVE_TIME_KEY, Date.now().toString());
+                // Ensure all current stats are saved
+                saveStats(); 
+                savePower();
+                saveSpeed();
+                saveCollection();
+                saveInventory();
+            }
+        });
+
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -794,6 +845,9 @@
             loadPower(); 
             loadCollection();
             loadInventory(); 
+
+            // Check for offline progress immediately
+            checkOfflineProgress();
 
             boostButtons.forEach(b => {
                 cooldowns[b.id] = 0;
@@ -811,7 +865,136 @@
             // Initial tab display: show the first tab by default
             openTab('luck-shop', getButton('luck-tab'));
         });
+        
+        // --- NEW OFFLINE PROGRESS FUNCTION ---
+        function checkOfflineProgress() {
+            const lastTime = localStorage.getItem(LAST_SAVE_TIME_KEY);
+            if (!lastTime) return; // No previous save time found
 
+            const lastTimestamp = parseInt(lastTime);
+            const currentTime = Date.now();
+            const timeDifferenceMs = currentTime - lastTimestamp;
+            
+            // Do not reward if less than 5 seconds have passed
+            if (timeDifferenceMs < 5000) return; 
+
+            // Clear the stored time so we only reward it once
+            localStorage.removeItem(LAST_SAVE_TIME_KEY);
+            
+            // Determine the time-per-roll
+            const timePerRollMs = autoRollSpeed;
+
+            // Cap the offline time (e.g., to 24 hours, or 86,400,000 ms)
+            const OFFLINE_CAP_MS = 86400000; 
+            
+            // Calculate the maximum number of rolls that could have occurred within the cap
+            const cappedRolls = Math.min(Math.floor(timeDifferenceMs / timePerRollMs), Math.floor(OFFLINE_CAP_MS / timePerRollMs));
+            
+            if (cappedRolls === 0) return;
+
+            // --- SIMULATE ROLLS ---
+            let totalRolls = cappedRolls;
+            let totalCoinsGained = 0;
+            let totalShardsGained = 0;
+            
+            // We do NOT add offline auras to inventory, they are automatically sold for value
+            
+            const currentAuraList = getAurasForRolling();
+            // Sort by chance to properly simulate the roll logic
+            const sortedAuras = [...currentAuraList].sort((a, b) => b.chance - a.chance);
+
+            for (let i = 0; i < totalRolls; i++) {
+                // Simulate a roll (always use 1x luck for offline, as boosts are temporary)
+                
+                let result = sortedAuras[0]; 
+                const OFFLINE_LUCK_MULT = 1; 
+                
+                for (let aura of sortedAuras) {
+                    let threshold = (1000 / aura.chance) * OFFLINE_LUCK_MULT;
+                    
+                     // Apply permanent rare bonus
+                    if (aura.rarity === 'Uncommon' || aura.rarity === 'Rare') {
+                        threshold += threshold * rareBonusLuck; 
+                    }
+
+                    if (Math.random() * 1000 <= threshold) {
+                        result = aura;
+                        break;
+                    }
+                }
+
+                // Grant rewards (Offline Auras are always sold instantly)
+                const coinGain = Math.floor(result.value * powerMultiplier);
+                totalCoinsGained += coinGain;
+                totalShardsGained += (result.shardValue * shardMultiplier);
+                
+                // Update collection
+                saveAuraToCollection(result.name);
+            }
+            
+            // --- APPLY TOTAL REWARDS ---
+            money += totalCoinsGained;
+            shards += totalShardsGained;
+            
+            // Since offline auras are auto-sold, we don't need inventory updates here.
+
+            // Final save after granting all offline progress
+            saveStats(); 
+            
+            // --- DISPLAY POPUP ---
+            const totalSeconds = Math.floor(timeDifferenceMs / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            
+            const popupMessage = `
+                Welcome back! You were away for ${hours}h ${minutes}m. (Capped at 24h)
+                \nOffline Progress Granted (${totalRolls.toLocaleString()} rolls):
+                \n💰 Coins Gained: ${totalCoinsGained.toLocaleString()}
+                \n💎 Shards Gained: ${totalShardsGained.toLocaleString()}
+                \n✅ Auras Collected: ${totalRolls} (Auto-Sold)
+            `;
+
+            alert(popupMessage);
+            
+            // Refresh displays
+            updateMoneyDisplay();
+            updateCollectedCount();
+        }
+        // --- END OFFLINE PROGRESS FUNCTION ---
+
+
+        // --- NEW AUTO-SELL LOGIC ---
+        function toggleAutoSell() {
+            isAutoSelling = !isAutoSelling;
+            saveStats();
+            updateAutoSellButton();
+
+            if (isAutoSelling) {
+                // If turning ON auto-sell, immediately sell any existing inventory
+                if (inventory.length > 0) {
+                    sellAllItems();
+                    alert("Auto-Sell activated. Existing inventory sold instantly.");
+                }
+            }
+        }
+
+        function updateAutoSellButton() {
+            const autoSellBtn = getButton('auto-sell-btn');
+            if (isAutoSelling) {
+                autoSellBtn.textContent = "AUTO SELL: ON (Instant Money)";
+                autoSellBtn.classList.add('active-sell');
+            } else {
+                autoSellBtn.textContent = "AUTO SELL: OFF (Save to Inventory)";
+                autoSellBtn.classList.remove('active-sell');
+            }
+        }
+        // --- END AUTO-SELL LOGIC ---
+
+
+        // --- REST OF CODE ---
+
+        // ... (getAuraDetails, updateMoneyDisplay, loadStats, saveStats, etc. remain unchanged unless modified for auto-sell)
+        
         // --- LOOT SHOP LOGIC (COIN SINK) ---
         function renderLootShop() {
             // Coin Sink (Mystery Box)
@@ -937,18 +1120,34 @@
 
             // 4. Display Result - Will be visible in the main display/inventory
             
-            // Add to collection and inventory
+            // Add to collection
             saveAuraToCollection(result.name);
-            addToInventory(result);
             
-            // Use the main display to show the Mystery Box result temporarily
-            getButton('aura-name').innerText = result.name;
-            getButton('aura-name').className = result.class;
-            getButton('aura-rarity').innerHTML = `MYSTERY BOX! ${result.rarity} Found!`;
-            
-            if (coinBonus > 0) {
-                 getButton('aura-rarity').innerHTML += `<br> +💰${coinBonus.toLocaleString()} BONUS!`;
+            // Check Auto-Sell state
+            if (isAutoSelling) {
+                 const coinGain = Math.floor(result.value * powerMultiplier);
+                 money += coinGain;
+                 shards += (result.shardValue * shardMultiplier);
+                 saveStats();
+                 // Display result with note
+                 getButton('aura-name').innerText = result.name;
+                 getButton('aura-name').className = result.class;
+                 getButton('aura-rarity').innerHTML = `MYSTERY BOX! ${result.rarity} Found! (AUTO-SOLD)`;
+                 if (coinBonus > 0) {
+                      getButton('aura-rarity').innerHTML += `<br> +💰${coinBonus.toLocaleString()} BONUS!`;
+                 }
+            } else {
+                 // Add to inventory if not auto-selling
+                 addToInventory(result);
+                 // Display result normally
+                 getButton('aura-name').innerText = result.name;
+                 getButton('aura-name').className = result.class;
+                 getButton('aura-rarity').innerHTML = `MYSTERY BOX! ${result.rarity} Found!`;
+                 if (coinBonus > 0) {
+                      getButton('aura-rarity').innerHTML += `<br> +💰${coinBonus.toLocaleString()} BONUS!`;
+                 }
             }
+            updateMoneyDisplay(); 
         }
 
 
@@ -986,17 +1185,15 @@
         // --- LTA ROTATION LOGIC ---
         function determineActiveLimitedAura() {
             const now = new Date();
-            // Note: In JavaScript, getDay() returns 0 for Sunday, 1 for Monday, etc.
             const localDay = now.getDay(); 
-            const dayOfWeek = localDay === 0 ? 7 : localDay; // Treat Sunday as Day 7 for a 1-7 rotation
+            const dayOfWeek = localDay === 0 ? 7 : localDay; 
 
-            // Simplified logic: LTA rotates daily.
             if (dayOfWeek === 1 || dayOfWeek === 2) { 
-                activeLimitedAura = limitedAuras[0]; // Seasonal Spook (Mythical)
+                activeLimitedAura = limitedAuras[0]; 
             } else if (dayOfWeek === 3 || dayOfWeek === 4) { 
-                activeLimitedAura = limitedAuras[1]; // Holiday Hype (Divine)
+                activeLimitedAura = limitedAuras[1]; 
             } else { 
-                activeLimitedAura = limitedAuras[2]; // Summer Chill (Cosmic)
+                activeLimitedAura = limitedAuras[2]; 
             }
             
             const midnight = new Date(now);
@@ -1023,21 +1220,17 @@
             const tabcontent = document.getElementById(tabName);
             const manualBtn = getButton('roll-btn');
             
-            // Check if the clicked tab is already active
             if (elmnt.classList.contains('active')) {
-                // If active, deactivate and hide it
                 elmnt.classList.remove('active');
                 tabcontent.classList.remove('active');
                 activeTabName = null;
                 
-                // If auto roll is NOT active, re-enable manual button
                 if (!autoRollInterval) {
                      manualBtn.disabled = false;
                      manualBtn.innerText = "STEAL!";
                 }
 
             } else {
-                // Deactivate all content and buttons first
                 const allTabContents = document.getElementsByClassName("tab-content");
                 for (let i = 0; i < allTabContents.length; i++) {
                     allTabContents[i].classList.remove('active');
@@ -1048,15 +1241,13 @@
                     allTablinks[i].classList.remove('active');
                 }
 
-                // Activate the selected tab
                 tabcontent.classList.add('active');
                 elmnt.classList.add('active');
                 activeTabName = tabName;
                 
-                // Always disable manual button if auto roll is active when changing tabs
                  if (autoRollInterval) {
                      manualBtn.disabled = true;
-                     manualBtn.innerText = "STEAL!"; // Keep text clean while auto-rolling
+                     manualBtn.innerText = "STEAL!"; 
                 }
             }
         }
@@ -1175,7 +1366,6 @@
         function doRebirth() {
             if (money < getRebirthCost()) return;
             
-            // KEEPING THE CONFIRMATION FOR THE MOST IMPORTANT RESET
             if (confirm(`Are you sure you want to Rebirth? This will reset your coins, speed upgrades, inventory, and luck boosts, but you will gain 1 Power and permanently multiply your income by ${(powerMultiplier * POWER_BONUS).toFixed(1)}x!`)) {
                 
                 power += 1;
@@ -1184,14 +1374,14 @@
                 
                 // Reset resources, but use the permanent start money upgrade
                 money = rebirthStartMoney; 
-                // Note: Shard Upgrades themselves (rebirthStartT1Purchased, rareBonusLuck) are not reset, only the shard currency.
                 shards = 0;
                 shardMultiplier = 1; 
                 autoRollSpeed = 1000;
                 speedLevel = 0;
                 inventory = [];
+                isAutoSelling = false; // Reset auto sell on rebirth
                 
-                saveStats(); // Saves money, shards, and shard upgrades
+                saveStats(); 
                 saveSpeed();
                 saveInventory();
                 
@@ -1201,14 +1391,12 @@
             }
         }
 
-        // --- RESTORED CONFIRMATION POP-UP FOR GAME RESET ---
         function resetGame() {
             if (confirm("🚨 WARNING: Are you absolutely sure you want to clear ALL game data (Money, Shards, Power, Collection)? This action is irreversible!")) {
                 localStorage.clear();
                 window.location.reload();
             }
         }
-        // ---------------------------------------------------
 
         function renderSpeedShop() {
             const shopEl = getButton('speed-upgrades');
@@ -1248,7 +1436,6 @@
                 saveSpeed(); 
                 updateMoneyDisplay(); 
                 
-                // If auto-roll is active, stop and restart it to apply the new speed
                 if (autoRollInterval) {
                     toggleAutoRoll(); 
                     toggleAutoRoll();
@@ -1365,7 +1552,6 @@
 
             const btn = getButton('roll-btn');
 
-            // Roll button control update: Always disable if auto-rolling
             if (!isAuto || autoRollInterval) { 
                 btn.disabled = true;
                 if (!isAuto) {
@@ -1386,7 +1572,7 @@
 
             const auraList = getAurasForRolling();
 
-            // Only perform the visual roll if the main tab is active
+            // Only run the visible animation if on a tab that allows it (or no tab is active)
             if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
                 await new Promise(resolve => {
                     let interval = setInterval(() => {
@@ -1403,7 +1589,6 @@
                     }, 100);
                 });
             } else {
-                 // Skip animation if on checklist/inventory tab
                  await new Promise(resolve => setTimeout(resolve, 100));
             }
 
@@ -1412,11 +1597,9 @@
             isRolling = false;
             
             if (!autoRollInterval) {
-                // Only re-enable if auto-roll is not running
                 btn.disabled = false;
                 btn.innerText = "STEAL AGAIN";
             } else {
-                // Ensure it stays disabled if auto-rolling
                 btn.disabled = true; 
                 btn.innerText = "STEAL!";
             }
@@ -1436,15 +1619,13 @@
             let result = null;
             const currentAuraList = getAurasForRolling();
 
-            // Auras are already sorted by chance in the definition, but sort here for safety
             const sortedAuras = [...currentAuraList].sort((a, b) => b.chance - a.chance);
 
             for (let aura of sortedAuras) {
                 let threshold = (1000 / aura.chance) * luckMultiplier;
                 
-                // Apply the permanent bonus to Uncommon and Rare Auras
                 if (aura.rarity === 'Uncommon' || aura.rarity === 'Rare') {
-                    threshold += threshold * rareBonusLuck; // 0.2x, 0.4x, or 0.6x bonus
+                    threshold += threshold * rareBonusLuck; 
                 }
 
                 if (Math.random() * 1000 <= threshold) {
@@ -1456,38 +1637,52 @@
             if (!result) result = auras[0];
 
             const coinGain = Math.floor(result.value * powerMultiplier);
-            money += coinGain;
+            const shardGain = result.shardValue * shardMultiplier;
             
-            // Do NOT save stats on every single roll (too slow).
-            // saveStats(); 
-            // updateMoneyDisplay(); // Only update the display
-
-            // Only show the result if a main shop tab is active
-            if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
-                displayResult(result, coinGain);
+            // --- AUTO-SELL CHECK ---
+            if (isAutoSelling) {
+                money += coinGain;
+                shards += shardGain;
+                
+                if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
+                    displayResult(result, coinGain, true); // Pass 'true' for auto-sold
+                }
             } else {
-                 // If running in the background, only update the status display and collection
-                 updateMoneyDisplay(); 
+                money += coinGain;
+                
+                if (activeTabName === 'luck-shop' || activeTabName === 'loot-shop' || activeTabName === 'speed-shop' || activeTabName === 'power-shop' || activeTabName === null) {
+                    displayResult(result, coinGain, false);
+                }
+                addToInventory(result);
             }
+            // --- END AUTO-SELL CHECK ---
 
             saveAuraToCollection(result.name);
-            addToInventory(result);
+            updateMoneyDisplay(); 
             
-            // Periodic save to prevent massive loss if the window is closed while auto-rolling
-             if (autoRollInterval && Math.random() < 0.05) { // Save roughly every 20 rolls (5% chance)
+             if (autoRollInterval && Math.random() < 0.05) { 
                  saveStats();
                  saveInventory();
             }
         }
 
-        function displayResult(item, coinGain) {
+        function displayResult(item, coinGain, wasAutoSold) {
             const nameEl = getButton('aura-name');
             const rarityEl = getButton('aura-rarity');
 
             nameEl.innerText = item.name;
             nameEl.className = item.class;
             
-            rarityEl.innerHTML = `1 in ${item.chance} • ${item.rarity}<br>+💰${coinGain.toLocaleString()} from steal`;
+            let rarityText = `1 in ${item.chance} • ${item.rarity}<br>+💰${coinGain.toLocaleString()} from steal`;
+            
+            if (wasAutoSold) {
+                // If auto-sold, show shard gain too
+                rarityText += ` +💎${item.shardValue * shardMultiplier} (AUTO-SOLD)`;
+            } else {
+                rarityText += ` (Saved to Inventory)`;
+            }
+
+            rarityEl.innerHTML = rarityText;
 
             if (item.chance >= 50) {
                 document.body.classList.add("flash");
@@ -1498,22 +1693,20 @@
         function addToInventory(item) {
             inventory.unshift({
                 name: item.name,
-                value: item.value // Store the base value for selling
+                value: item.value 
             });
 
-            // Keep inventory max size manageable (e.g., 500 items)
             if (inventory.length > 500) {
                  inventory.pop();
             }
 
-            renderInventory(); // Only renders the visible list (up to 500 items)
+            renderInventory(); 
         }
 
         function toggleAutoRoll() {
             const autoBtn = getButton('auto-roll-btn');
             const manualBtn = getButton('roll-btn');
             
-            // Use the throttle preventer audio element
             const throttleElement = getButton('throttle-preventer'); 
 
             if (autoRollInterval) {
@@ -1524,10 +1717,8 @@
                 manualBtn.disabled = false;
                 manualBtn.innerText = "STEAL AGAIN";
                 
-                // Pause the audio to release throttle prevention
                 if (throttleElement) { throttleElement.pause(); throttleElement.currentTime = 0; }
                 
-                // Final save when stopping
                 saveStats(); 
                 saveInventory();
 
@@ -1538,7 +1729,6 @@
                 manualBtn.innerText = "STEAL!";
                 autoBtn.innerText = "STOP AUTO ROLL";
 
-                // Play the silent audio loop to prevent browser throttling in inactive tabs
                 if (throttleElement) throttleElement.play().catch(e => console.error("Audio Autoplay prevented. Background rolling may fail.", e));
 
                 autoRollInterval = setInterval(() => {
