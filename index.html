@@ -1,203 +1,2648 @@
-// =======================================================
-// CORE SETUP (Three.js)
-// =======================================================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roll an Aura Incremental</title>
 
-// 1. Scene
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xadd8e6); // Light blue sky
+    <style>
+        /* --- Base Styles --- */
+        :root {
+            /* Colors */
+            --bg-dark: #1e1e1e;
+            --bg-light: #2c2c2c;
+            --text-light: #f0f0f0;
+            --text-dark: #1e1e1e;
+            --accent-blue: #007bff;
+            --accent-green: #28a745;
+            --border-color: #444;
 
-// 2. Camera
-const camera = new THREE.PerspectiveCamera( 
-    75, 
-    window.innerWidth / window.innerHeight, 
-    0.1, 
-    1000 
-);
+            /* Rarity Colors (Dark Mode Friendly) */
+            --color-common: #888;
+            --color-uncommon: #2ECC71;
+            --color-rare: #3498DB;
+            --color-epic: #9B59B6;
+            --color-legendary: #E67E22;
+            --color-mythical: #E74C3C;
+            --color-divine: #F1C40F;
+            --color-cosmic: #1ABC9C;
+            --color-void: #34495E;
+            --color-eternal: #FF4500;
+        }
 
-// 3. Renderer
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize( window.innerWidth, window.innerHeight );
-document.body.appendChild( renderer.domElement );
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
 
-// Handle window resizing
-window.addEventListener('resize', () => {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-});
+        .header {
+            background-color: var(--bg-light);
+            padding: 15px;
+            border-bottom: 2px solid var(--border-color);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
 
-// =======================================================
-// PHYSICS SETUP (Cannon.js)
-// =======================================================
-
-const world = new CANNON.World();
-world.gravity.set(0, -9.82, 0); // Standard gravity
-world.broadphase = new CANNON.NaiveBroadphase();
-const timeStep = 1 / 60; // Physics update frequency
-
-// =======================================================
-// LEVEL GEOMETRY (Three.js Meshes & Cannon.js Bodies)
-// =======================================================
-
-// --- GROUND ---
-const groundGeometry = new THREE.BoxGeometry( 20, 1, 20 ); 
-const groundMaterial = new THREE.MeshLambertMaterial( { color: 0x888888 } );
-const ground = new THREE.Mesh( groundGeometry, groundMaterial );
-scene.add( ground );
-
-const groundHalfExtents = new CANNON.Vec3(10, 0.5, 10); 
-const groundShape = new CANNON.Box(groundHalfExtents);
-const groundBody = new CANNON.Body({
-    mass: 0, // Static object
-    shape: groundShape,
-    position: new CANNON.Vec3(0, -0.5, 0) // Position matches the Three.js mesh
-});
-world.addBody(groundBody);
-
-
-// --- PLAYER ---
-const playerGeometry = new THREE.BoxGeometry( 1, 1, 1 );
-const playerMaterial = new THREE.MeshPhongMaterial( { color: 0xff0000 } );
-const player = new THREE.Mesh( playerGeometry, playerMaterial );
-scene.add( player );
-
-const playerHalfExtents = new CANNON.Vec3(0.5, 0.5, 0.5); 
-const playerShape = new CANNON.Box(playerHalfExtents);
-const playerBody = new CANNON.Body({
-    mass: 5, // Dynamic object (affected by gravity)
-    shape: playerShape,
-    position: new CANNON.Vec3(0, 5, 0) // Start player high up to demonstrate falling
-});
-world.addBody(playerBody);
-
-
-// --- COIN (Collectible) ---
-const coinGeometry = new THREE.CylinderGeometry( 0.3, 0.3, 0.05, 16 ); 
-const coinMaterial = new THREE.MeshPhongMaterial( { color: 0xffd700 } ); 
-const coin = new THREE.Mesh( coinGeometry, coinMaterial );
-coin.position.set( 5, 2, 0 ); 
-scene.add( coin );
-
-// Cannon Body for the Coin
-const coinShape = new CANNON.Cylinder( 0.3, 0.3, 0.05, 16 );
-const coinBody = new CANNON.Body({
-    mass: 0, 
-    shape: coinShape,
-    position: new CANNON.Vec3(5, 2, 0)
-});
-// CRITICAL: Set collisionResponse to 0 so the player can pass through it (it's a trigger)
-coinBody.collisionResponse = 0; 
-world.addBody(coinBody);
-
-// Array to track all active coins
-const collectibles = [{ mesh: coin, body: coinBody }];
-
-
-// =======================================================
-// LIGHTING
-// =======================================================
-const ambientLight = new THREE.AmbientLight( 0x404040, 5 ); 
-scene.add( ambientLight );
-
-const directionalLight = new THREE.DirectionalLight( 0xffffff, 1 );
-directionalLight.position.set( 5, 10, 7.5 ); 
-scene.add( directionalLight );
-
-
-// =======================================================
-// INPUT HANDLING
-// =======================================================
-const keys = {}; 
-const speed = 5; // Movement speed for the playerBody
-
-document.addEventListener('keydown', (event) => {
-    keys[event.code] = true;
-});
-
-document.addEventListener('keyup', (event) => {
-    keys[event.code] = false;
-});
-
-
-// =======================================================
-// COLLISION HANDLER (Coin Collection)
-// =======================================================
-
-playerBody.addEventListener('collide', function(event) {
-    const collidedBody = event.body; 
-
-    // Find the index of the collided body in our collectibles array
-    const coinIndex = collectibles.findIndex(item => item.body === collidedBody);
-
-    if (coinIndex !== -1) {
-        // Coin Collected!
-        const collectedCoin = collectibles[coinIndex];
+        .header h1 {
+            margin: 0;
+            font-size: 1.8em;
+            color: var(--text-light);
+        }
         
-        // 1. Remove from THREE.js scene (Visual)
-        scene.remove(collectedCoin.mesh);
+        #username-display {
+            font-size: 0.9em;
+            margin-top: 5px;
+            color: var(--accent-blue);
+        }
+
+
+        .game-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px 15px;
+        }
+
+        /* --- Status Bar (Modern Grid) --- */
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            padding: 15px;
+            margin: 15px auto;
+            width: 100%;
+            max-width: 900px;
+            background-color: var(--bg-light);
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .status-bar p {
+            margin: 0;
+            font-size: 0.9em;
+            font-weight: 500;
+            text-align: center;
+            padding: 5px 0;
+            border-radius: 6px;
+            background-color: #333;
+        }
+
+        .status-bar span {
+            font-weight: bold;
+            color: var(--accent-blue);
+        }
+
+        .limited-status {
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 0.95em;
+            font-style: italic;
+            border: 1px dashed var(--border-color);
+            width: 100%;
+            max-width: 900px;
+            background-color: #242424;
+            border-radius: 8px;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        /* --- Roll Area --- */
+        .roll-area {
+            width: 100%;
+            max-width: 450px;
+            margin-bottom: 20px;
+        }
+
+        .display-area {
+            min-height: 120px;
+            background-color: #111;
+            border: 3px solid var(--border-color);
+            margin-bottom: 15px;
+            border-radius: 10px;
+            box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .display-area p {
+            margin: 5px 0;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        /* --- Modern Buttons --- */
+        .roll-btn, .auto-btn, .sell-all-btn, .rebirth-btn, .upgrade-btn, .boost-btn, .data-btn, .reset-btn, .inventory-btn {
+            padding: 12px 20px;
+            font-size: 1em;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            margin: 5px 0;
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 8px;
+            transition: all 0.15s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            color: var(--text-dark);
+        }
+
+        .roll-btn {
+            background-color: var(--accent-green);
+        }
+
+        .roll-btn:hover:not(:disabled) {
+            background-color: #38c156;
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.6);
+        }
+
+        .auto-btn {
+            background-color: #555;
+            color: var(--text-light);
+            margin-top: 10px;
+        }
+
+        .auto-btn:hover:not(:disabled) {
+            background-color: #666;
+        }
+
+        .auto-btn.active-sell {
+            background-color: var(--accent-blue);
+            color: var(--text-light);
+        }
+
+        .roll-btn:disabled, .auto-btn:disabled, .rebirth-btn:disabled, .sell-all-btn:disabled, .boost-btn.disabled-boost {
+            background-color: #444;
+            color: #888;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* --- Rarity Styles (Focus on Text Shadow/Color) --- */
+        .common { color: var(--color-common); }
+        .uncommon { color: var(--color-uncommon); text-shadow: 0 0 5px var(--color-uncommon); }
+        .rare { color: var(--color-rare); text-shadow: 0 0 6px var(--color-rare); }
+        .epic { color: var(--color-epic); text-shadow: 0 0 7px var(--color-epic); }
+        .legendary { color: var(--color-legendary); text-shadow: 0 0 8px var(--color-legendary); }
+        .mythical { color: var(--color-mythical); text-shadow: 0 0 9px var(--color-mythical); }
+        .divine { color: var(--color-divine); text-shadow: 0 0 10px var(--color-divine); }
+        .cosmic { color: var(--color-cosmic); text-shadow: 0 0 12px var(--color-cosmic); }
+        .void { color: var(--bg-dark); background-color: var(--color-void); text-shadow: none; padding: 0 5px; border-radius: 3px;}
+        .eternal { color: var(--color-eternal); text-shadow: 0 0 15px var(--color-eternal); }
+
+        .auto-flash {
+            animation: pulse-border 1.5s infinite alternate;
+        }
+
+        @keyframes pulse-border {
+            from { border-color: var(--border-color); }
+            to { border-color: var(--accent-blue); }
+        }
+
+        /* --- Tabs --- */
+        .tabs-container {
+            width: 100%;
+            max-width: 900px;
+            margin: 15px auto;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-light);
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        .tab-buttons {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--border-color);
+            background-color: #3c3c3c;
+        }
+
+        .tab-button {
+            flex-shrink: 0;
+            background-color: #3c3c3c;
+            color: var(--text-light);
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border-right: 1px solid #2c2c2c;
+        }
+
+        .tab-button:last-child {
+            border-right: none;
+        }
+
+        .tab-button.active {
+            background-color: var(--bg-light);
+            font-weight: bold;
+            box-shadow: inset 0 3px 0 var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        .tab-content {
+            padding: 20px;
+            display: none;
+            text-align: left;
+        }
+
+        .tab-content h3 {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+            color: var(--text-light);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* --- Shop Grids (Flexible/Grid Layout) --- */
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .boost-btn {
+            background-color: #555;
+            color: var(--text-light);
+            padding: 15px;
+            line-height: 1.4;
+            font-size: 0.9em;
+        }
+
+        .boost-btn:hover:not(:disabled) {
+            background-color: #777;
+        }
+
+        .boost-btn.active-boost {
+            background-color: #ffc107;
+            color: var(--text-dark);
+            box-shadow: 0 0 10px #ffc107;
+        }
+
+        /* --- Power Shop & Upgrade Items --- */
+        .power-shop-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .upgrade-item {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 5px solid var(--accent-blue);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+        }
+
+        .upgrade-item p {
+            margin: 5px 0;
+            font-size: 1em;
+        }
+
+        .upgrade-btn {
+            padding: 8px 15px;
+            margin-top: 10px;
+            background-color: var(--accent-blue);
+            color: var(--text-light);
+            width: auto;
+            display: block;
+        }
+
+        .upgrade-btn:hover:not(:disabled) {
+            background-color: #0069d9;
+        }
+
+        .purchased-upgrade {
+            border-left-color: var(--accent-green);
+            background-color: #384238;
+        }
         
-        // 2. Remove from CANNON.js world (Physics)
-        world.removeBody(collectedCoin.body);
+        .purchased-upgrade button {
+            background-color: var(--accent-green);
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .note {
+            font-size: 0.85em;
+            color: #aaa;
+            margin-top: 8px;
+            font-style: italic;
+        }
+
+        /* --- Leaderboard Styles --- */
+        .leaderboard-list {
+            list-style: none;
+            padding: 0;
+            margin: 15px 0;
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            background-color: #333;
+            font-weight: 500;
+            border-left: 5px solid #555;
+            transition: all 0.2s;
+        }
+
+        .leaderboard-item.player-rank {
+            background-color: #494935; /* Gold-ish background */
+            border-left-color: #ffc107;
+            color: #ffc107;
+            font-weight: bold;
+            box-shadow: 0 0 8px rgba(255, 193, 7, 0.4);
+        }
         
-        // 3. Remove from our tracking array
-        collectibles.splice(coinIndex, 1);
+        .leaderboard-item.top-rank {
+            background-color: #493a35; /* Bronze/Silver background */
+            border-left-color: #e67e22;
+            font-weight: bold;
+        }
+
+        .leaderboard-item span:first-child {
+            flex-grow: 1;
+            text-align: left;
+        }
+
+        .leaderboard-item span:last-child {
+            text-align: right;
+            font-size: 1.1em;
+        }
+
+
+        /* --- Rebirth --- */
+        .rebirth-area {
+            text-align: center;
+        }
+
+        .rebirth-btn {
+            background-color: #dc3545;
+            color: var(--text-light);
+            max-width: 450px;
+            margin: 20px auto;
+        }
+
+        .rebirth-btn:hover:not(:disabled) {
+            background-color: #c82333;
+        }
+
+        .rebirth-status {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 10px 0;
+            text-align: center;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        /* --- Checklist --- */
+        .checklist-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .uncollected-item {
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #333;
+            border-left: 4px solid #555;
+            transition: all 0.2s;
+        }
+
+        .collected-item {
+            background-color: #384238;
+            border-left: 4px solid var(--accent-green);
+            text-decoration: line-through;
+            color: #888;
+        }
         
-        console.log("Coin Collected! Total remaining:", collectibles.length);
-    }
-});
+        /* Apply rarity colors to collected items */
+        .collected-item.uncommon { border-left-color: var(--color-uncommon); }
+        .collected-item.rare { border-left-color: var(--color-rare); }
+        .collected-item.epic { border-left-color: var(--color-epic); }
+        .collected-item.legendary { border-left-color: var(--color-legendary); }
+        /* etc. for all rarities */
 
 
-// =======================================================
-// GAME LOOP
-// =======================================================
+        /* --- Inventory --- */
+        .inventory-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .inventory-controls .auto-btn, .inventory-controls .sell-all-btn {
+            width: calc(50% - 5px); /* Half width for mobile */
+            font-size: 0.9em;
+            margin: 0;
+            color: var(--text-light);
+        }
 
-function animate() {
-    requestAnimationFrame( animate ); 
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+        }
 
-    // 1. Physics Update
-    world.step(timeStep); 
+        .inv-item {
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 6px;
+            text-align: center;
+            background-color: #333;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+        }
+        
+        .inv-item .inventory-btn {
+            padding: 5px 10px;
+            margin-top: 8px;
+            background-color: #777;
+            color: var(--text-light);
+            border-radius: 4px;
+            width: 100%;
+        }
+        
+        .inv-item .inventory-btn:hover {
+            background-color: #999;
+        }
 
-    // 2. Control Logic (Applying velocity based on keys)
-    // We preserve the current Y-velocity (which is gravity/jump)
-    let velocity = new CANNON.Vec3(0, playerBody.velocity.y, 0); 
-    
-    if (keys['KeyW']) { // Forward
-        velocity.z = -speed;
-    } else if (keys['KeyS']) { // Backward
-        velocity.z = speed;
-    } else {
-        velocity.z = 0; // Stop horizontal movement when keys are released
-    }
-    
-    if (keys['KeyA']) { // Left
-        velocity.x = -speed;
-    } else if (keys['KeyD']) { // Right
-        velocity.x = speed;
-    } else {
-        velocity.x = 0; // Stop horizontal movement when keys are released
-    }
+        .sell-all-btn {
+            background-color: #dc3545;
+            color: var(--text-light);
+        }
+        
+        .sell-all-btn:hover:not(:disabled) {
+            background-color: #c82333;
+        }
 
-    // Set the new calculated velocity back to the player body
-    playerBody.velocity.set(velocity.x, velocity.y, velocity.z); 
+        /* --- Settings --- */
+        .settings-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 10px 0;
+        }
+        
+        .reset-btn {
+            background-color: #343a40;
+            color: #ff6347;
+            border: 1px solid #ff6347;
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1em;
+            box-shadow: 0 0 10px rgba(255, 99, 71, 0.3);
+        }
 
-    // 3. Synchronization (Copy position/rotation from physics body to visual mesh)
-    player.position.copy(playerBody.position);
-    player.quaternion.copy(playerBody.quaternion);
+        .reset-btn:hover {
+            background-color: #495057;
+        }
 
-    // 4. Coin Animation
-    for (const item of collectibles) {
-        item.mesh.rotation.y += 0.05; 
-    }
+        .save-load-area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
 
-    // 5. Camera Follow
-    camera.position.x = player.position.x;
-    camera.position.z = player.position.z + 5; 
-    camera.position.y = player.position.y + 2; 
-    camera.lookAt(player.position);
+        #save-data-field {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            background-color: #333;
+            color: var(--text-light);
+            border: 1px solid #555;
+            border-radius: 6px;
+            resize: vertical;
+            font-family: Consolas, monospace;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
 
-    // 6. Render
-    renderer.render( scene, camera );
-}
+        .data-btn {
+            padding: 10px 15px;
+            background-color: #6c757d;
+            color: var(--text-light);
+        }
+        
+        .data-btn:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
 
-// Start the loop!
-animate();
+    <div class="header">
+        <h1>✨ Roll an Aura Incremental V3.7 ✨</h1>
+        <p id="username-display"></p>
+    </div>
+
+    <div class="status-bar">
+        <p>💰 Money: <span id="money-display">500</span></p>
+        <p>💎 Shards: <span id="shard-display">0</span></p>
+        <p>⚡ Power: <span id="power-display">0</span></p>
+        <p>Income Multiplier: <span id="income-mult-display">1.00x</span></p>
+        <p>Total Luck: <span id="luck-display">1.0x</span></p>
+    </div>
+
+    <div id="limited-aura-display" class="limited-status">No Limited-Time Aura is currently active.</div>
+
+    <div class="game-area">
+        <div class="roll-area">
+            <div id="display-area" class="display-area">
+                <p id="aura-name">???</p>
+                <p id="aura-rarity">Click button to roll</p>
+            </div>
+
+            <button id="roll-btn" onclick="rollAura()" class="roll-btn">ROLL AURA</button>
+            <button id="auto-roll-btn" onclick="toggleAutoRoll()" class="auto-btn">AUTO ROLL</button>
+        </div>
+
+        <div class="tabs-container">
+            <div class="tab-buttons">
+                <button id="luck-tab-btn" class="tab-button active" onclick="openTab('luck-shop', this)">Luck Shop</button>
+                <button id="speed-tab-btn" class="tab-button" onclick="openTab('speed-shop', this)">Speed</button>
+                <button id="loot-tab-btn" class="tab-button" onclick="openTab('loot-shop', this)">Loot/Specials</button>
+                <button id="power-tab-btn" class="tab-button" onclick="openTab('power-shop', this)">Power Shop</button>
+                <button id="leaderboard-tab-btn" class="tab-button" onclick="openTab('leaderboard-tab', this)">Leader Board</button>
+                <button id="rebirth-tab-btn" class="tab-button" onclick="openTab('rebirth-tab', this)">Rebirth</button>
+                <button id="checklist-tab-btn" class="tab-button" onclick="openTab('checklist-tab', this)">Checklist (<span id="collected-count">0/34</span>)</button>
+                <button id="inventory-tab-btn" class="tab-button" onclick="openTab('inventory-tab', this)">Inventory</button>
+                <button id="settings-tab-btn" class="tab-button" onclick="openTab('settings-tab', this)">Settings</button>
+            </div>
+
+            <div id="luck-shop" class="tab-content active">
+                <h3>Temporary Luck Boosts (Rolls Left is Duration)</h3>
+                <div class="shop-grid">
+                    <button id="boost-5x" class="boost-btn" onclick="activateBoost(5)">5X LUCK<br>(Cost: 💰1,000)</button>
+                    <button id="boost-10x" class="boost-btn" onclick="activateBoost(10)">10X LUCK<br>(Cost: 💰5,000)</button>
+                    <button id="boost-100x" class="boost-btn" onclick="activateBoost(100)">100X LUCK<br>(Cost: 💰50,000)</button>
+                </div>
+            </div>
+
+            <div id="speed-shop" class="tab-content">
+                <h3>Roll Speed Upgrades <span id="speed-level-display">(Level 0)</span></h3>
+                <div id="speed-upgrades" class="shop-grid">
+                    </div>
+            </div>
+
+            <div id="loot-shop" class="tab-content">
+                <h3>Special Rolls & Loot</h3>
+                <div class="shop-grid">
+                    <button id="mystery-btn" class="boost-btn mystery-box" onclick="openMysteryBox()">MYSTERY BOX<br>(Cost: 💰50,000)</button>
+                    <button id="high-cost-roll-btn" class="boost-btn high-cost-roll" onclick="rollAura(false, true)">ULTIMATE ROLL<br>(Cost: 💰100,000)</button>
+                </div>
+                <p class="note">Mystery Box: Guaranteed Legendary+ Aura (Auto-Sold). Ultimate Roll: Guaranteed Rare+ Aura.</p>
+            </div>
+
+            <div id="power-shop" class="tab-content">
+                <h3>Shard Upgrades (Permanent)</h3>
+                <div class="power-shop-grid">
+                    <div class="upgrade-item">
+                        <p>Shard Multiplier: <span id="shard-mult-status">1x</span></p>
+                        <button class="upgrade-btn" onclick="buyShardUpgrade('shard-mult')">Upgrade (Cost: 💎<span id="shard-mult-cost-display">?</span>)</button>
+                        <p class="note">Increases shards gained from selling.</p>
+                    </div>
+                    <div class="upgrade-item">
+                        <p>Permanent Luck: <span id="permanent-luck-status">+0.0x</span></p>
+                        <button class="upgrade-btn" onclick="buyShardUpgrade('permanent-luck')">Sharp Sight (Cost: 💎<span id="perm-luck-cost-display">?</span>)</button>
+                        <p class="note">Permanently increases base luck by +0.1x (No max cap).</p>
+                    </div>
+                    <div class="upgrade-item">
+                        <p>Aura Sell Multiplier: <span id="aura-sell-mult-status">1.0x</span></p>
+                        <button class="upgrade-btn" onclick="buyShardUpgrade('aura-sell-mult')">Sell Power (Cost: 💎<span id="sell-mult-cost-display">?</span>)</button>
+                        <p class="note">Permanently increases the money value of all auras by +0.2x (No max cap).</p>
+                    </div>
+                    <div class="upgrade-item">
+                        <p>Rare/Uncommon Chance: <span id="rare-chance-status">+0.0x</span></p>
+                        <button class="upgrade-btn" onclick="buyShardUpgrade('rare-chance')">Sharp Senses (Cost: 💎<span id="rare-chance-cost-display">?</span>)</button>
+                        <p class="note">Permanently increases Uncommon/Rare chance by +0.1x (No max cap).</p>
+                    </div>
+                    <div class="upgrade-item">
+                        <p>Pocket Change T1 (💰2,500): <span id="rebirth-start-1-status">Status: Unpurchased</span></p>
+                        <button id="rebirth-start-1-btn" class="upgrade-btn" onclick="buyShardUpgrade('rebirth-start-1')">Buy (Cost: 💎25)</button>
+                        <p class="note">Start with more money after Rebirth.</p>
+                    </div>
+                    <div class="upgrade-item">
+                        <p>Pocket Change T2 (💰10,000): <span id="rebirth-start-2-status">Status: Unpurchased</span></p>
+                        <button id="rebirth-start-2-btn" class="upgrade-btn" onclick="buyShardUpgrade('rebirth-start-2')">Buy (Cost: 💎75)</button>
+                        <p class="note">Start with even more money after Rebirth.</p>
+                    </div>
+                    <div class="upgrade-item">
+                        <p>Auto-Sell Tier Control (T1): <span id="auto-sell-tier-status">Status: Unpurchased</span></p>
+                        <button id="auto-sell-tier-btn" class="upgrade-btn" onclick="buyShardUpgrade('auto-sell-tier')">Buy (Cost: 💎100)</button>
+                        <p class="note">Unlock basic auto-sell rarity filters (Common/Uncommon).</p>
+                    </div>
+                    <div class="upgrade-item">
+                        <p>Auto-Sell Tier Control (T2): <span id="auto-sell-tier-2-status">Status: Requires Tier 1 Upgrade</span></p>
+                        <button id="auto-sell-tier-2-btn" class="upgrade-btn" onclick="buyShardUpgrade('auto-sell-tier-2')">Buy (Cost: 💎250)</button>
+                        <p class="note">Unlock advanced auto-sell rarity filters (Epic/Mythical/Cosmic).</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="leaderboard-tab" class="tab-content">
+                <h3>💰 Top 10 Money Earners (Local)</h3>
+                <ul id="leaderboard-list" class="leaderboard-list">
+                    </ul>
+                <p class="note">This leaderboard is simulated and local to your browser. Your rank updates every few seconds.</p>
+            </div>
+
+            <div id="rebirth-tab" class="tab-content rebirth-area">
+                <h3>Rebirth (Gain Power)</h3>
+                <p>Power provides a permanent **<span id="income-mult-display-rebirth">2% per point</span>** income multiplier to all coin gains.</p>
+                <p id="rebirth-cost-display" class="rebirth-status">Reach 💰1,000,000 to Rebirth.</p>
+                <button id="rebirth-btn" onclick="doRebirth()" class="rebirth-btn">REBIRTH</button>
+            </div>
+
+            <div id="checklist-tab" class="tab-content">
+                <h3>Aura Collection Checklist</h3>
+                <p>Collected: <span id="collected-count">0/34</span></p>
+                <div id="uncollected-list" class="checklist-grid">
+                    </div>
+            </div>
+
+            <div id="inventory-tab" class="tab-content">
+                <h3>Inventory</h3>
+                <div class="inventory-controls">
+                    <button id="auto-sell-btn" onclick="toggleAutoSell()" class="auto-btn">AUTO SELL: OFF</button>
+                    <button id="auto-sell-toggle-rarity-btn" onclick="toggleAutoSellRarity()" class="auto-btn" disabled>Change Rarity Tier</button>
+                    <button id="sell-all-btn" onclick="sellAllItems()" class="sell-all-btn">SELL ALL ITEMS (0)</button>
+                </div>
+                <div id="inventory-list" class="inventory-grid">
+                    </div>
+            </div>
+
+            <div id="settings-tab" class="tab-content">
+                <h3>Settings & Data</h3>
+                <div class="settings-grid">
+                    <button onclick="resetGame()" class="reset-btn">RESET GAME (DANGER)</button>
+                    <p class="note">This will permanently erase all local game data.</p>
+                </div>
+
+                <hr style="border-color: #555;">
+
+                <h3>Save/Load Data</h3>
+                <div class="save-load-area">
+                    <textarea id="save-data-field" placeholder="Paste or copy save data here..." rows="4"></textarea>
+                    <button onclick="exportSaveData()" class="data-btn">EXPORT Data</button>
+                    <button onclick="importSaveData()" class="data-btn">IMPORT Data</button>
+                    <p id="import-status" class="note"></p>
+                </div>
+            </div>
+            </div>
+    </div>
+
+    <script>
+        // Define currency and storage key globally
+        // NOTE: VERSION_KEY has been updated to v3_7_0_0
+        const VERSION_KEY = 'v3_7_0_0';
+
+        let username = "Player";
+        let money = 0;
+        let shards = 0;
+        let shardMultiplier = 1;
+        let rebirthStartMoney = 500;
+        let rebirthStartT1Purchased = false;
+        let rebirthStartT2Purchased = false;
+        let rareBonusLuck = 0;
+
+        // SHARD STORE VARIABLES
+        let permanentBaseLuck = 0;
+        const BASE_PERM_LUCK_COST = 50;
+
+        // Aura Sell Multiplier
+        let auraSellMultiplier = 1.0;
+        const BASE_SELL_MULT_COST = 20;
+
+        // AUTO-SELL TIER VARIABLES
+        let isAutoSellTierUnlocked = false; // T1 (2 Tiers)
+        let isAutoSellTier2Unlocked = false; // T2 (4 Tiers)
+        let autoSellRarityTier = 'TIER_ALL';
+        const AUTO_SELL_TIER_COST = 100;
+        const AUTO_SELL_TIER_2_COST = 250;
+
+        let autoRollSpeed = 1000;
+        let speedLevel = 0;
+        let power = 0;
+        let powerMultiplier = 1;
+        const BASE_REBIRTH_COST = 1000000;
+        const POWER_BONUS = 2;
+
+        let isAutoSelling = false;
+
+        // New Storage keys for V3.7
+        const USERNAME_STORAGE_KEY = `aura_username_${VERSION_KEY}`;
+        const MONEY_STORAGE_KEY = `aura_money_${VERSION_KEY}`;
+        const SHARDS_STORAGE_KEY = `aura_shards_${VERSION_KEY}`;
+        const SHARD_MULT_STORAGE_KEY = `aura_shard_mult_${VERSION_KEY}`;
+        const REBIRTH_START_T1_KEY = `aura_start_t1_purchased_${VERSION_KEY}`;
+        const REBIRTH_START_T2_KEY = `aura_start_t2_purchased_${VERSION_KEY}`;
+        const RARE_BONUS_KEY = `aura_rare_bonus_luck_${VERSION_KEY}`;
+        const PERMANENT_LUCK_KEY = `aura_permanent_luck_${VERSION_KEY}`;
+        const AURA_SELL_MULT_KEY = `aura_sell_mult_${VERSION_KEY}`;
+        const AUTO_SELL_TIER_UNLOCK_KEY = `aura_auto_sell_tier_unlocked_${VERSION_KEY}`;
+        const AUTO_SELL_TIER_2_UNLOCK_KEY = `aura_auto_sell_tier_2_unlocked_${VERSION_KEY}`;
+        const AUTO_SELL_RARITY_KEY = `aura_auto_sell_rarity_tier_${VERSION_KEY}`;
+        const SPEED_STORAGE_KEY = `aura_speed_${VERSION_KEY}`;
+        const POWER_STORAGE_KEY = `aura_power_${VERSION_KEY}`;
+        const COLLECTION_STORAGE_KEY = `aura_collection_${VERSION_KEY}`;
+        const INVENTORY_STORAGE_KEY = `aura_inventory_${VERSION_KEY}`;
+        const LAST_SAVE_TIME_KEY = `aura_last_save_time_${VERSION_KEY}`;
+        const AUTO_SELL_KEY = `aura_auto_sell_${VERSION_KEY}`;
+        const LUCK_MULT_KEY = `aura_luck_mult_${VERSION_KEY}`;
+        const ROLLS_LEFT_KEY = `aura_rolls_left_${VERSION_KEY}`;
+        const COOLDOWNS_KEY = `aura_cooldowns_${VERSION_KEY}`;
+
+        // --- DUMMY LEADER BOARD DATA ---
+        const DUMMY_PLAYERS = [
+            { name: "The OG Giga", money: 1000000000000000 },
+            { name: "Infinity Chad", money: 50000000000000 },
+            { name: "Cosmic Rizz", money: 10000000000000 },
+            { name: "Abyssal Boss", money: 5000000000000 },
+            { name: "Apex Grinder", money: 1000000000000 },
+            { name: "Epic Roller", money: 50000000000 },
+            { name: "Rare Hunter", money: 1000000000 },
+            { name: "Uncommon Pro", money: 50000000 },
+            { name: "Common Looter", money: 1000000 }
+        ];
+
+        // --- CORE AURA LIST (Same as V3.5) ---
+        const auras = [
+            { name: "NPC Energy", rarity: "Common", chance: 2, class: "common", value: 50, shardValue: 0 },
+            { name: "Low Taper Fade", rarity: "Common", chance: 3, class: "common", value: 60, shardValue: 0 },
+            { name: "V3 NPC Energy", rarity: "Common", chance: 1, class: "common", value: 40, shardValue: 0 }, 
+            { name: "Just a Chill Guy", rarity: "Uncommon", chance: 5, class: "uncommon", value: 75, shardValue: 0 },
+            { name: "Bombastic Side Eye", rarity: "Uncommon", chance: 8, class: "uncommon", value: 100, shardValue: 0 },
+            { name: "Grimace Shake", rarity: "Rare", chance: 15, class: "rare", value: 150, shardValue: 1 },
+            { name: "Skibidi Toilet", rarity: "Rare", chance: 25, class: "rare", value: 250, shardValue: 1 },
+            { name: "Gen Z Slang Master", rarity: "Rare", chance: 30, class: "rare", value: 300, shardValue: 1 },
+            { name: "Fanum Tax", rarity: "Epic", chance: 50, class: "epic", value: 500, shardValue: 2 },
+            { name: "6-7 BRAIN ROT", rarity: "Epic", chance: 80, class: "epic", value: 800, shardValue: 2 },
+            { name: "Ohio Final Boss", rarity: "Epic", chance: 80, class: "epic", value: 900, shardValue: 2 },
+            { name: "Rizz God", rarity: "Epic", chance: 100, class: "epic", value: 1200, shardValue: 2 },
+            { name: "Final Boss's Minion", rarity: "Epic", chance: 120, class: "epic", value: 1500, shardValue: 2 },
+            { name: "Cringe Compilation", rarity: "Epic", chance: 150, class: "epic", value: 1800, shardValue: 2 }, 
+            { name: "SIGMA GIGACHAD", rarity: "LEGENDARY", chance: 200, class: "legendary", value: 2500, shardValue: 5 },
+            { name: "MAXIMUM RIZZLER", rarity: "LEGENDARY", chance: 500, class: "legendary", value: 5000, shardValue: 5 },
+            { name: "BUSSIN' Aura", rarity: "LEGENDARY", chance: 600, class: "legendary", value: 7500, shardValue: 5 },
+            { name: "Hyper-Chad", rarity: "LEGENDARY", chance: 750, class: "legendary", value: 9000, shardValue: 5 },
+            { name: "MAX RIZZ LEVEL 100", rarity: "LEGENDARY", chance: 900, class: "legendary", value: 10000, shardValue: 5 }, 
+            { name: "✨ THE ONE PIECE ✨", rarity: "MYTHICAL", chance: 1000, class: "mythical", value: 15000, shardValue: 10 },
+            { name: "Infinite Brain Rot", rarity: "MYTHICAL", chance: 1200, class: "mythical", value: 20000, shardValue: 10 },
+            { name: "✨ Infinite Rizz ✨", rarity: "MYTHICAL", chance: 1500, class: "mythical", value: 25000, shardValue: 10 },
+            { name: "Tung Tung Shar", rarity: "DIVINE", chance: 2500, class: "divine", value: 30000, shardValue: 20 },
+            { name: "DeeMeeTree", rarity: "DIVINE", chance: 2500, class: "divine", value: 35000, shardValue: 20 },
+            { name: "Crashout Kid", rarity: "DIVINE", chance: 3500, class: "divine", value: 40000, shardValue: 20 },
+            { name: "Sigma Chad", rarity: "COSMIC", chance: 5000, class: "cosmic", value: 50000, shardValue: 30 },
+            { name: "Big Back", rarity: "COSMIC", chance: 5000, class: "cosmic", value: 75000, shardValue: 30 },
+            { name: "Hyper-Dimensional Back", rarity: "COSMIC", chance: 7500, class: "cosmic", value: 120000, shardValue: 30 },
+            { name: "Giga Chad V3", rarity: "COSMIC", chance: 10000, class: "cosmic", value: 150000, shardValue: 35 }, 
+            { name: "ABYSSAL HORROR", rarity: "VOID", chance: 10000, class: "void", value: 150000, shardValue: 50 },
+            { name: "THE ANCIENT V3", rarity: "ETERNAL", chance: 20000, class: "eternal", value: 300000, shardValue: 75 } 
+        ];
+
+        // Rarity mapping for auto-sell tiers
+        const RARITY_MAP = {
+            'Common': 0, 'Uncommon': 1, 'Rare': 2, 'Epic': 3, 'LEGENDARY': 4, 'MYTHICAL': 5, 'DIVINE': 6, 'COSMIC': 7, 'VOID': 8, 'ETERNAL': 9
+        };
+
+        const AUTO_SELL_RARITY_TIERS = {
+            'TIER_ALL': { maxRarityIndex: 9, label: 'All Rarity (Sell EVERYTHING)' },
+            'TIER_0': { maxRarityIndex: 0, label: 'Common Only' },
+            'TIER_1': { maxRarityIndex: 1, label: 'Common & Uncommon' },
+            'TIER_2': { maxRarityIndex: 3, label: 'Common to Epic' }, // TIER 2 UNLOCK
+            'TIER_3': { maxRarityIndex: 5, label: 'Common to Mythical' }, // TIER 2 UNLOCK
+            'TIER_4': { maxRarityIndex: 7, label: 'Common to Cosmic' }, // TIER 2 UNLOCK
+        };
+
+        // --- LIMITED TIME AURA (LTA) LIST ---
+        const limitedAuras = [
+            { name: "Seasonal Spook", rarity: "MYTHICAL (LTD)", chance: 1500, class: "mythical", value: 30000, shardValue: 15, id: 1, season: 'Fall' },
+            { name: "Holiday Hype", rarity: "DIVINE (LTD)", chance: 3000, class: "divine", value: 50000, shardValue: 25, id: 2, season: 'Winter' },
+            { name: "Summer Chill", rarity: "COSMIC (LTD)", chance: 7500, class: "cosmic", value: 100000, shardValue: 40, id: 3, season: 'Summer' }
+        ];
+
+        let activeLimitedAura = null;
+
+        const speedUpgrades = [
+            { id: 1, cost: 10000, speed: 750, label: "Fast Roll (750ms)" },
+            { id: 2, cost: 50000, speed: 500, label: "Turbo Roll (500ms)" },
+            { id: 3, cost: 250000, speed: 250, label: "Max Speed (250ms)" }
+        ];
+
+        // GLOBAL STATE VARIABLES
+        let isRolling = false;
+        let autoRollInterval = null; // Will hold the setInterval ID
+        let luckMultiplier = 1;
+        let rollsLeft = 0;
+        let cooldowns = {}; // Tracks time remaining for boost cooldowns
+        let activeTabName = 'luck-shop';
+
+        // Collection Tracking
+        let collectedAuras = new Set();
+        let inventory = [];
+
+        // Boost Button Definitions
+        const boostButtons = [
+            { id: 'boost-5x', mult: 5, cost: 1000, duration: 10, cooldown: 300, name: '5X LUCK' }, 
+            { id: 'boost-10x', mult: 10, cost: 5000, duration: 5, cooldown: 600, name: '10X LUCK' }, 
+            { id: 'boost-100x', mult: 100, cost: 50000, duration: 1, cooldown: 6000, name: '100X LUCK' }
+        ];
+
+        // Store active cooldown interval timers
+        let cooldownTimers = {};
+
+        function getButton(id) {
+            // This is the helper function that finds an element by ID
+            return document.getElementById(id);
+        }
+
+        // Helper to find the full aura object (including rarity/class) from name
+        function getAuraDetails(name) {
+            const allAuras = [...auras, ...limitedAuras];
+            return allAuras.find(a => a.name === name);
+        }
+
+        // --- Large Number Formatting Function ---
+        function formatNumber(num) {
+            num = Number(num); // Ensure num is treated as a number
+            if (num < 1000) {
+                return Math.floor(num).toLocaleString();
+            }
+
+            const suffixes = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "De", "Un", "Do"];
+            let suffixIndex = 0;
+            let value = num;
+
+            while (value >= 1000 && suffixIndex < suffixes.length - 1) {
+                value /= 1000;
+                suffixIndex++;
+            }
+
+            let formattedValue;
+            if (value >= 100) {
+                formattedValue = value.toFixed(0);
+            } else {
+                formattedValue = value.toFixed(1);
+            }
+
+
+            return formattedValue + suffixes[suffixIndex];
+        }
+        // --- END Large Number Formatting Function ---
+
+        // --- CURRENCY AND STATS ---
+        function updateMoneyDisplay() {
+            // Apply new formatting to status displays
+            getButton('money-display').textContent = formatNumber(money);
+            getButton('shard-display').textContent = formatNumber(shards);
+            getButton('power-display').textContent = formatNumber(power);
+
+            // The 'income-mult-display' span
+            getButton('income-mult-display').textContent = `${powerMultiplier.toFixed(2)}x`;
+            // And the element in the Rebirth tab
+            const rebirthMultDisplay = getButton('income-mult-display-rebirth');
+            if (rebirthMultDisplay) {
+                rebirthMultDisplay.textContent = `${(powerMultiplier * 100 - 100).toFixed(0)}% per point`;
+            }
+
+            // Update Header Display
+            getButton('username-display').textContent = `Username: ${username}`;
+
+            updateLuckDisplay();
+            renderSpeedShop();
+            updateRebirthDisplay();
+            renderLootShop();
+            renderPowerShop();
+            updateAutoSellButton();
+        }
+
+        function loadStats() {
+            // New V3.5: Load Username
+            username = localStorage.getItem(USERNAME_STORAGE_KEY) || "Player";
+
+            // NOTE: LoadStats is now ONLY used to read from localStorage.
+            money = parseInt(localStorage.getItem(MONEY_STORAGE_KEY) || 500);
+            shards = parseInt(localStorage.getItem(SHARDS_STORAGE_KEY) || 0);
+            shardMultiplier = parseInt(localStorage.getItem(SHARD_MULT_STORAGE_KEY) || 1);
+
+            // SHARD UPGRADES LOADING
+            rebirthStartT1Purchased = localStorage.getItem(REBIRTH_START_T1_KEY) === 'true';
+            rebirthStartT2Purchased = localStorage.getItem(REBIRTH_START_T2_KEY) === 'true';
+            rareBonusLuck = parseFloat(localStorage.getItem(RARE_BONUS_KEY) || 0);
+
+            // SHARD STORE LOADING
+            permanentBaseLuck = parseFloat(localStorage.getItem(PERMANENT_LUCK_KEY) || 0);
+            // Aura Sell Multiplier
+            auraSellMultiplier = parseFloat(localStorage.getItem(AURA_SELL_MULT_KEY) || 1.0);
+
+            // NEW AUTO-SELL TIER LOADING
+            isAutoSellTierUnlocked = localStorage.getItem(AUTO_SELL_TIER_UNLOCK_KEY) === 'true';
+            isAutoSellTier2Unlocked = localStorage.getItem(AUTO_SELL_TIER_2_UNLOCK_KEY) === 'true'; // V3 New Load
+            autoSellRarityTier = localStorage.getItem(AUTO_SELL_RARITY_KEY) || 'TIER_ALL';
+
+            // AUTO-SELL LOADING
+            isAutoSelling = localStorage.getItem(AUTO_SELL_KEY) === 'true';
+
+            // SPEED LOADING (Need to calculate speedLevel here)
+            autoRollSpeed = parseInt(localStorage.getItem(SPEED_STORAGE_KEY) || 1000);
+            // Determine speedLevel from autoRollSpeed
+            const speedUpgrade = speedUpgrades.find(u => u.speed === autoRollSpeed);
+            speedLevel = speedUpgrade ? speedUpgrade.id : 0;
+
+
+            // Calculate starting money
+            rebirthStartMoney = 500;
+            if (rebirthStartT1Purchased) rebirthStartMoney = 2500;
+            if (rebirthStartT2Purchased) rebirthStartMoney = 10000;
+        }
+
+        function saveStats() {
+            // New V3.5: Save Username
+            localStorage.setItem(USERNAME_STORAGE_KEY, username);
+
+            // NOTE: saveStats is now ONLY used to write to localStorage.
+            localStorage.setItem(MONEY_STORAGE_KEY, money.toString());
+            localStorage.setItem(SHARDS_STORAGE_KEY, shards.toString());
+            localStorage.setItem(SHARD_MULT_STORAGE_KEY, shardMultiplier.toString());
+
+            // SHARD UPGRADES SAVING
+            localStorage.setItem(REBIRTH_START_T1_KEY, rebirthStartT1Purchased.toString());
+            localStorage.setItem(REBIRTH_START_T2_KEY, rebirthStartT2Purchased.toString());
+            localStorage.setItem(RARE_BONUS_KEY, rareBonusLuck.toString());
+
+            // SHARD STORE SAVING
+            localStorage.setItem(PERMANENT_LUCK_KEY, permanentBaseLuck.toFixed(1));
+            // Aura Sell Multiplier
+            localStorage.setItem(AURA_SELL_MULT_KEY, auraSellMultiplier.toFixed(1));
+
+            // NEW AUTO-SELL TIER SAVING
+            localStorage.setItem(AUTO_SELL_TIER_UNLOCK_KEY, isAutoSellTierUnlocked.toString());
+            localStorage.setItem(AUTO_SELL_TIER_2_UNLOCK_KEY, isAutoSellTier2Unlocked.toString()); // V3 New Save
+            localStorage.setItem(AUTO_SELL_RARITY_KEY, autoSellRarityTier);
+
+            // AUTO-SELL SAVING
+            localStorage.setItem(AUTO_SELL_KEY, isAutoSelling.toString());
+
+            // SPEED SAVING
+            localStorage.setItem(SPEED_STORAGE_KEY, autoRollSpeed.toString());
+        }
+
+        function loadPower() {
+            power = parseInt(localStorage.getItem(POWER_STORAGE_KEY) || 0);
+            calculatePowerMultiplier();
+        }
+
+        function savePower() {
+            localStorage.setItem(POWER_STORAGE_KEY, power.toString());
+        }
+
+        function updateCollectedCount() {
+            getButton('collected-count').textContent = `${collectedAuras.size}/${auras.length + limitedAuras.length}`;
+        }
+
+        function loadInventory() {
+            const storedInventory = localStorage.getItem(INVENTORY_STORAGE_KEY);
+            if (storedInventory) {
+                try {
+                    inventory = JSON.parse(storedInventory);
+                } catch (e) {
+                    inventory = [];
+                }
+            }
+        }
+
+        function saveInventory() {
+            localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory));
+        }
+
+        // --- NEW BOOST STATE SAVING/LOADING ---
+        function saveBoostState() {
+            localStorage.setItem(LUCK_MULT_KEY, luckMultiplier.toString());
+            localStorage.setItem(ROLLS_LEFT_KEY, rollsLeft.toString());
+
+            // Save the time remaining for all cooldowns
+            const savedCooldowns = {};
+            boostButtons.forEach(b => {
+                // Only save if a cooldown is active
+                if (cooldowns[b.id] > 0) {
+                    savedCooldowns[b.id] = cooldowns[b.id];
+                }
+            });
+            localStorage.setItem(COOLDOWNS_KEY, JSON.stringify(savedCooldowns));
+        }
+
+        function loadBoostState() {
+            luckMultiplier = parseFloat(localStorage.getItem(LUCK_MULT_KEY) || 1);
+            rollsLeft = parseInt(localStorage.getItem(ROLLS_LEFT_KEY) || 0);
+
+            // Load cooldowns
+            const storedCooldownsJson = localStorage.getItem(COOLDOWNS_KEY);
+            if (storedCooldownsJson) {
+                try {
+                    const storedCooldowns = JSON.parse(storedCooldownsJson);
+
+                    // Initialize or reset cooldowns array first
+                    boostButtons.forEach(b => {
+                        cooldowns[b.id] = storedCooldowns[b.id] || 0;
+                    });
+
+                    // Re-start the timers for active cooldowns
+                    boostButtons.forEach(b => {
+                        if (cooldowns[b.id] > 0) {
+                            // Find the correct starting cooldown duration (cooldown value in boostButtons array)
+                            const boostInfo = boostButtons.find(info => info.id === b.id);
+                            const startingDuration = boostInfo.cooldown || boostInfo.duration;
+                            // Pass the *remaining* time to the function
+                            startCooldown(b.id, cooldowns[b.id], startingDuration);
+                        }
+                    });
+                } catch (e) {
+                    // Reset cooldowns if parsing failed
+                    boostButtons.forEach(b => cooldowns[b.id] = 0);
+                }
+            } else {
+                boostButtons.forEach(b => cooldowns[b.id] = 0);
+            }
+
+            // If the multiplier is > 1 but rolls are 0 (e.g., bugged save), reset it
+            if (luckMultiplier > 1 && rollsLeft <= 0) {
+                luckMultiplier = 1;
+            }
+        }
+
+
+        // --- Record Time on Exit ---
+        window.addEventListener('beforeunload', () => {
+            // Only record the time if the game has started
+            if (money > 0 || shards > 0 || power > 0) {
+                localStorage.setItem(LAST_SAVE_TIME_KEY, Date.now().toString());
+                // Ensure all current stats are saved
+                saveStats(); // Now includes autoRollSpeed
+                savePower();
+                saveCollection();
+                saveInventory();
+                saveBoostState();
+            }
+        });
+
+        // --- NEW V3.6: MAIN GAME LOOP FOR PASSIVE UPDATES ---
+
+        function mainGameLoop() {
+            // 1. Update Leaderboard (Now runs every 5 seconds)
+            if (activeTabName === 'leaderboard-tab') {
+                renderLeaderBoard();
+            }
+
+            // 2. Update Rebirth Status
+            if (activeTabName === 'rebirth-tab') {
+                updateRebirthDisplay();
+            }
+            
+            // 3. Update Inventory/Sell button count
+            if (activeTabName === 'inventory-tab') {
+                renderInventory();
+            }
+
+            // 4. Update Shops (to show money/shard cost status)
+            if (activeTabName === 'luck-shop') renderLuckShop();
+            if (activeTabName === 'speed-shop') renderSpeedShop();
+            if (activeTabName === 'power-shop') renderPowerShop();
+            if (activeTabName === 'loot-shop') renderLootShop();
+
+
+            // 5. Save all stats every 5 seconds
+            saveStats();
+            savePower();
+            saveCollection();
+            saveInventory();
+            saveBoostState();
+
+            // 6. Update Core Status Bar (money, shards, etc.)
+            updateMoneyDisplay();
+        }
+
+        // --- NEW: USERNAME PROMPT FUNCTION ---
+        function promptForUsername() {
+            // Only prompt if a username hasn't been set or is default "Player"
+            if (localStorage.getItem(USERNAME_STORAGE_KEY) && localStorage.getItem(USERNAME_STORAGE_KEY) !== "Player") {
+                return;
+            }
+
+            let newUsername = prompt("Welcome! Please enter your username (Max 16 characters):", "NewRoller");
+
+            if (newUsername) {
+                // Sanitize and cap length
+                newUsername = newUsername.trim().substring(0, 16);
+                if (newUsername.length === 0) {
+                    newUsername = "Player";
+                }
+            } else {
+                newUsername = "Player"; // Default if canceled or empty
+            }
+
+            username = newUsername;
+            localStorage.setItem(USERNAME_STORAGE_KEY, username);
+        }
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. New V3.5: Prompt for Username
+            promptForUsername();
+
+            // 2. Load all other stats
+            loadStats();
+            loadPower();
+            loadCollection();
+            loadInventory();
+            loadBoostState();
+
+            // 3. Check for offline progress immediately
+            checkOfflineProgress();
+
+            // 4. Start the auto-roll interval if it was previously active
+            if (localStorage.getItem(AUTO_SELL_KEY) === 'true') {
+                // This is a manual start that prevents the button from changing state visually.
+                autoRollInterval = setInterval(() => {
+                    if (!isRolling) {
+                        rollAura(true);
+                    }
+                }, autoRollSpeed);
+                // Update button visual to reflect loaded state
+                const btn = getButton('auto-roll-btn');
+                btn.textContent = `AUTO ROLLING (${autoRollSpeed}ms)`;
+                btn.classList.add('active-sell');
+                getButton('roll-btn').disabled = true;
+                getButton('display-area').classList.add('auto-flash');
+            }
+
+
+            determineActiveLimitedAura();
+            updateLuckDisplay();
+            renderChecklist();
+            updateCollectedCount();
+            renderInventory();
+            renderSpeedShop();
+            updateRebirthDisplay(); 
+            updateMoneyDisplay(); // Initial update of all status displays
+
+            // 5. Start the main game loop for passive updates (including Leader Board)
+            setInterval(mainGameLoop, 5000); // Update every 5 seconds
+
+            // 6. Initial tab display: show the first tab by default
+            openTab('luck-shop', getButton('luck-tab-btn'));
+        });
+
+        // --- OFFLINE PROGRESS FUNCTION ---
+        function checkOfflineProgress() {
+            const lastTime = localStorage.getItem(LAST_SAVE_TIME_KEY);
+            if (!lastTime) return; // No previous save time found
+
+            const lastTimestamp = parseInt(lastTime);
+            const currentTime = Date.now();
+            const timeDifferenceMs = currentTime - lastTimestamp;
+
+            // Do not reward if less than 5 seconds have passed
+            if (timeDifferenceMs < 5000) return;
+
+            // Clear the stored time so we only reward it once
+            localStorage.removeItem(LAST_SAVE_TIME_KEY);
+
+            // Determine the time-per-roll
+            const timePerRollMs = autoRollSpeed;
+
+            // Cap the offline time (e.g., to 24 hours, or 86,400,000 ms)
+            const OFFLINE_CAP_MS = 86400000;
+
+            // Calculate the maximum number of rolls that could have occurred within the cap
+            const cappedRolls = Math.min(Math.floor(timeDifferenceMs / timePerRollMs), Math.floor(OFFLINE_CAP_MS / timePerRollMs));
+
+            if (cappedRolls === 0) return;
+
+            // --- SIMULATE ROLLS ---
+            let totalRolls = cappedRolls;
+            let totalCoinsGained = 0;
+            let totalShardsGained = 0;
+
+            // Determine the aura list for offline roll
+            determineActiveLimitedAura(); // Set LTA based on current time
+            const currentAuraList = getAurasForRolling();
+
+            // Sort by chance to properly simulate the roll logic
+            const sortedAuras = [...currentAuraList].sort((a, b) => b.chance - a.chance);
+
+            for (let i = 0; i < totalRolls; i++) {
+                // Simulate a roll (always use 1x luck for offline, as boosts are temporary)
+
+                let result = sortedAuras[0];
+                const OFFLINE_LUCK_MULT = 1;
+
+                for (let aura of sortedAuras) {
+                    // NEW: Include permanent luck in offline calculation
+                    const totalBaseLuck = 1 + permanentBaseLuck;
+                    const effectiveLuck = totalBaseLuck * OFFLINE_LUCK_MULT;
+                    let threshold = (1000 / aura.chance) * effectiveLuck;
+
+                    // Apply permanent rare bonus
+                    if (aura.rarity === 'Uncommon' || aura.rarity === 'Rare') {
+                        threshold += threshold * rareBonusLuck;
+                    }
+
+                    if (Math.random() * 1000 <= threshold) {
+                        result = aura;
+                        break;
+                    }
+                }
+
+                // Grant rewards (Offline Auras are always sold instantly)
+                // Apply AuraSellMultiplier to the coin gain
+                const coinGain = Math.floor(result.value * powerMultiplier * auraSellMultiplier);
+                totalCoinsGained += coinGain;
+                totalShardsGained += (result.shardValue * shardMultiplier);
+
+                // Update collection
+                saveAuraToCollection(result.name);
+            }
+
+            // --- APPLY TOTAL REWARDS ---
+            money += totalCoinsGained;
+            shards += totalShardsGained;
+
+            // Final save after granting all offline progress
+            saveStats();
+
+            // --- DISPLAY POPUP ---
+            const totalSeconds = Math.floor(timeDifferenceMs / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+            const popupMessage = `
+                Welcome back, ${username}! You were away for ${hours}h ${minutes}m. (Capped at 24h)
+                \nOffline Progress Granted (${totalRolls.toLocaleString()} rolls):
+                \n💰 Coins Gained: ${formatNumber(totalCoinsGained)}
+                \n💎 Shards Gained: ${formatNumber(totalShardsGained)}
+                \n✅ Auras Collected: ${totalRolls} (Auto-Sold)
+            `;
+
+            alert(popupMessage);
+
+            // Refresh displays
+            updateMoneyDisplay();
+            updateCollectedCount();
+        }
+        // --- END OFFLINE PROGRESS FUNCTION ---
+
+
+        // --- IMPORT / EXPORT FUNCTIONS (Updated for Username) ---
+
+        function getSaveObject() {
+            // Collect ALL persistent variables into one object
+            return {
+                username: username, // V3.5
+                money: money,
+                shards: shards,
+                shardMultiplier: shardMultiplier,
+                rebirthStartT1Purchased: rebirthStartT1Purchased,
+                rebirthStartT2Purchased: rebirthStartT2Purchased,
+                rareBonusLuck: rareBonusLuck,
+                permanentBaseLuck: permanentBaseLuck,
+                auraSellMultiplier: auraSellMultiplier,
+                isAutoSellTierUnlocked: isAutoSellTierUnlocked,
+                isAutoSellTier2Unlocked: isAutoSellTier2Unlocked,
+                autoSellRarityTier: autoSellRarityTier,
+                isAutoSelling: isAutoSelling,
+                autoRollSpeed: autoRollSpeed,
+                speedLevel: speedLevel,
+                power: power,
+                collectedAuras: Array.from(collectedAuras),
+                inventory: inventory,
+                luckMultiplier: luckMultiplier,
+                rollsLeft: rollsLeft,
+                cooldowns: cooldowns
+            };
+        }
+
+        function exportSaveData() {
+            const saveData = getSaveObject();
+            const jsonString = JSON.stringify(saveData);
+
+            // Base64 encode the JSON string
+            const encodedString = btoa(jsonString);
+
+            const saveField = getButton('save-data-field');
+            saveField.value = encodedString;
+            saveField.select(); // Select the text for easy copying
+
+            // Use modern clipboard API if available, fallback to execCommand
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(encodedString)
+                    .then(() => {
+                        getButton('import-status').textContent = "Save data EXPORTED and copied to clipboard!";
+                        getButton('import-status').style.color = 'var(--accent-blue)';
+                    })
+                    .catch(err => {
+                        console.error('Could not copy text: ', err);
+                        // Fallback to manual copy prompt if clipboard fails
+                        getButton('import-status').textContent = "Save data EXPORTED. Please manually copy the text below!";
+                        getButton('import-status').style.color = '#dc3545';
+                    });
+            } else {
+                // Deprecated execCommand fallback
+                try {
+                    document.execCommand('copy');
+                    getButton('import-status').textContent = "Save data EXPORTED and copied to clipboard (via fallback)!";
+                    getButton('import-status').style.color = 'var(--accent-blue)';
+                } catch (err) {
+                    getButton('import-status').textContent = "Save data EXPORTED. Please manually copy the text below!";
+                    getButton('import-status').style.color = '#dc3545';
+                }
+            }
+        }
+
+        function importSaveData() {
+            const encodedString = getButton('save-data-field').value.trim();
+            const statusEl = getButton('import-status');
+
+            if (!encodedString) {
+                statusEl.textContent = "Please paste save data into the box first.";
+                statusEl.style.color = '#dc3545';
+                return;
+            }
+
+            try {
+                // Base64 decode the string
+                const jsonString = atob(encodedString);
+                const importedData = JSON.parse(jsonString);
+
+                // Basic check for validity (must have key properties)
+                if (!importedData || typeof importedData.shards === 'undefined' || typeof importedData.power === 'undefined') {
+                    throw new Error("Invalid or corrupted save file format.");
+                }
+
+                // --- Apply the Imported Data ---
+                username = importedData.username || "Player"; // V3.5 Load
+                money = importedData.money || 0;
+                shards = importedData.shards || 0;
+                shardMultiplier = importedData.shardMultiplier || 1;
+                rebirthStartT1Purchased = importedData.rebirthStartT1Purchased || false;
+                rebirthStartT2Purchased = importedData.rebirthStartT2Purchased || false;
+                rareBonusLuck = importedData.rareBonusLuck || 0;
+                permanentBaseLuck = importedData.permanentBaseLuck || 0;
+                // Load ASM (default to 1.0 if not present in older saves)
+                auraSellMultiplier = importedData.auraSellMultiplier || 1.0;
+                isAutoSellTierUnlocked = importedData.isAutoSellTierUnlocked || false;
+                isAutoSellTier2Unlocked = importedData.isAutoSellTier2Unlocked || false;
+                // Preserve old autoSellRarityTier value if imported is missing
+                autoSellRarityTier = importedData.autoSellRarityTier || 'TIER_ALL';
+                isAutoSelling = importedData.isAutoSelling || false;
+                autoRollSpeed = importedData.autoRollSpeed || 1000;
+                speedLevel = importedData.speedLevel || 0;
+                power = importedData.power || 0;
+
+                // Handle Collection/Inventory
+                collectedAuras = new Set(importedData.collectedAuras || []);
+                inventory = importedData.inventory || [];
+
+                // Handle Boost State
+                luckMultiplier = importedData.luckMultiplier || 1;
+                rollsLeft = importedData.rollsLeft || 0;
+                cooldowns = importedData.cooldowns || {};
+
+                // Re-calculate derived values
+                calculatePowerMultiplier();
+                rebirthStartMoney = 500;
+                if (rebirthStartT1Purchased) rebirthStartMoney = 2500;
+                if (rebirthStartT2Purchased) rebirthStartMoney = 10000;
+
+                // --- Save & Reload UI ---
+                saveStats();
+                savePower();
+                saveCollection();
+                saveInventory();
+                saveBoostState();
+
+                // Re-start any active cooldown timers from the loaded state
+                Object.values(cooldownTimers).forEach(clearInterval); // Clear old timers
+                cooldownTimers = {};
+                boostButtons.forEach(b => {
+                    if (cooldowns[b.id] > 0) {
+                        const boostInfo = boostButtons.find(info => info.id === b.id);
+                        const startingDuration = boostInfo.cooldown || boostInfo.duration;
+                        startCooldown(b.id, cooldowns[b.id], startingDuration);
+                    }
+                });
+
+                statusEl.textContent = "SUCCESS! Game data imported. Reloading...";
+                statusEl.style.color = 'var(--accent-green)';
+
+                // Reload the page to ensure all game state initializes correctly from the new localStorage
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+
+            } catch (e) {
+                console.error("Import failed:", e);
+                statusEl.textContent = "ERROR: Failed to import data. Check format or data integrity.";
+                statusEl.style.color = '#dc3545';
+            }
+        }
+        // --- END IMPORT / EXPORT FUNCTIONS ---
+
+        function determineActiveLimitedAura() {
+            const now = new Date();
+            const month = now.getMonth(); // 0 (Jan) to 11 (Dec)
+            const day = now.getDate();
+            const year = now.getFullYear();
+
+            // Check if it's the 11th of the month (Special Day)
+            const isSpecialDay = day === 11;
+
+            if (isSpecialDay) {
+                // SPECIAL DAY AURA (Active 24 hours on the 11th)
+                activeLimitedAura = {
+                    name: "GEMINI AI (LTD)", rarity: "VOID (LTD)", chance: 5000, class: "void", value: 200000, shardValue: 60, id: 99, season: 'Special Day'
+                };
+            } else if (month === 8 || month === 9 || month === 10) { // Sept, Oct, Nov (Fall)
+                activeLimitedAura = limitedAuras.find(a => a.season === 'Fall');
+            } else if (month === 11 || month === 0 || month === 1) { // Dec, Jan, Feb (Winter)
+                activeLimitedAura = limitedAuras.find(a => a.season === 'Winter');
+            } else if (month === 5 || month === 6 || month === 7) { // Jun, Jul, Aug (Summer)
+                activeLimitedAura = limitedAuras.find(a => a.season === 'Summer');
+            } else {
+                activeLimitedAura = null; // No seasonal aura active (Spring is default off-season)
+            }
+
+            // Update the display message
+            const statusEl = getButton('limited-aura-display');
+            if (statusEl && activeLimitedAura) {
+                statusEl.innerHTML = `🌟 **LIMITED TIME AURA ACTIVE!** 🌟<br>Rarity: <span class="${activeLimitedAura.class}">${activeLimitedAura.rarity}</span> (${activeLimitedAura.name})`;
+                statusEl.style.color = 'var(--text-light)';
+            } else if (statusEl) {
+                statusEl.textContent = "No Limited-Time Aura is currently active.";
+                statusEl.style.color = 'var(--text-light)';
+            }
+        }
+
+        function getAurasForRolling() {
+            const currentAuras = [...auras];
+            if (activeLimitedAura) {
+                currentAuras.push(activeLimitedAura);
+            }
+            return currentAuras;
+        }
+
+        // --- CORE GAME MECHANICS ---
+
+        function calculateTotalLuck() {
+            // Total Luck = (Base Luck (1) + Permanent Luck) * Temporary Multiplier * Power Multiplier
+            const totalBaseLuck = 1 + permanentBaseLuck;
+            return totalBaseLuck * luckMultiplier * powerMultiplier;
+        }
+
+        function rollAura(isAutoRoll = false, isHighCostRoll = false) {
+            if (isRolling) return;
+
+            // Check if this is a standard roll
+            if (!isAutoRoll && !isHighCostRoll) {
+                // Prevent manual rolls if auto-roll is running
+                if (autoRollInterval) {
+                    alert("Please stop auto-roll before performing a manual roll.");
+                    return;
+                }
+            }
+
+            // Check High Cost Roll cost
+            if (isHighCostRoll) {
+                const cost = 100000;
+                if (money < cost) {
+                    alert(`You need 💰${formatNumber(cost)} for an Ultimate Roll!`);
+                    return;
+                }
+                money -= cost;
+                saveStats();
+                updateMoneyDisplay();
+            }
+
+
+            // Check if a boost roll is active
+            if (rollsLeft > 0) {
+                rollsLeft--;
+            }
+            if (rollsLeft === 0 && luckMultiplier > 1) {
+                // Boost expires
+                luckMultiplier = 1;
+                saveBoostState();
+            }
+
+            isRolling = true;
+            getButton('roll-btn').disabled = true;
+            if (isHighCostRoll) getButton('high-cost-roll-btn').disabled = true;
+
+
+            const auraList = getAurasForRolling();
+            // Sort by chance to determine rarity correctly (highest chance = lowest rarity first)
+            const sortedAuras = [...auraList].sort((a, b) => b.chance - a.chance);
+
+            let result = sortedAuras[0]; // Default to the most common one in case no check passes
+            const totalLuck = calculateTotalLuck();
+            const rollValue = Math.random() * 1000; // Random value from 0 to 1000
+
+            // --- Core Roll Logic ---
+            for (let aura of sortedAuras) {
+                // Chance to roll = (1000 / Aura Chance Denominator) * Total Luck
+                let threshold = (1000 / aura.chance) * totalLuck;
+
+                // Apply permanent rare bonus
+                if (aura.rarity === 'Uncommon' || aura.rarity === 'Rare') {
+                    threshold += threshold * rareBonusLuck;
+                }
+
+                if (isHighCostRoll) {
+                    // For Ultimate Roll, apply a minimum baseline of Rare rarity (chance: 30)
+                    const rareThreshold = (1000 / 30) * totalLuck;
+                    if (threshold < rareThreshold) {
+                        threshold = rareThreshold;
+                    }
+                }
+
+                if (rollValue <= threshold) {
+                    result = aura;
+                    break;
+                }
+            }
+            // --- End Core Roll Logic ---
+
+
+            // Display animation and result
+            displayRollResult(result, isAutoRoll, isHighCostRoll);
+        }
+
+        function displayRollResult(result, isAutoRoll, isHighCostRoll) {
+            const display = getButton('display-area');
+            const nameEl = getButton('aura-name');
+            const rarityEl = getButton('aura-rarity');
+
+            // --- Grant Rewards (Before Display) ---
+            // Apply AuraSellMultiplier to the coin gain
+            const coinGain = Math.floor(result.value * powerMultiplier * auraSellMultiplier);
+            const shardGain = result.shardValue * shardMultiplier;
+
+            // Save the aura to the collection (even if sold)
+            saveAuraToCollection(result.name);
+
+            // Determine if the item should be sold based on Auto-Sell settings
+            let shouldAutoSell = false;
+            if (isAutoSelling) {
+                if (autoSellRarityTier === 'TIER_ALL') {
+                    shouldAutoSell = true;
+                } else {
+                    const maxRarityIndex = AUTO_SELL_RARITY_TIERS[autoSellRarityTier].maxRarityIndex;
+                    const auraRarityIndex = RARITY_MAP[result.rarity];
+                    // Sell if the item's rarity index is less than or equal to the setting's max index
+                    if (auraRarityIndex <= maxRarityIndex) {
+                        shouldAutoSell = true;
+                    }
+                }
+            }
+
+            let displayName = result.name;
+
+            if (shouldAutoSell) {
+                money += coinGain;
+                shards += shardGain;
+                // Add temporary status to the local display name variable ONCE
+                displayName += " (SOLD)";
+            } else {
+                inventory.unshift(result); // Add to inventory (latest first)
+                saveInventory();
+            }
+
+            updateMoneyDisplay();
+
+
+            // --- Display Animation ---
+            let rollCount = 0;
+            const maxRolls = 10;
+            const rollInterval = 50; // 50ms per roll step
+
+            const interval = setInterval(() => {
+                const tempAura = auras[Math.floor(Math.random() * auras.length)];
+                nameEl.textContent = tempAura.name;
+                rarityEl.textContent = tempAura.rarity;
+                // Use a generic background but keep the class for text color
+                display.className = `display-area ${tempAura.class}`;
+                rollCount++;
+
+                if (rollCount >= maxRolls) {
+                    clearInterval(interval);
+
+                    // Final result display
+                    nameEl.textContent = displayName; 
+                    
+                    // --- V3.4: SHARD DISPLAY IMPLEMENTATION ---
+                    let rarityText = `${result.rarity} - 💰${formatNumber(coinGain)}`;
+                    if (shouldAutoSell && shardGain > 0) {
+                        // Only display shards if auto-sold AND the shard gain is positive
+                        rarityText += ` / 💎${formatNumber(shardGain)}`;
+                    } else if (!shouldAutoSell) {
+                         rarityText += ` (KEPT)`;
+                    }
+
+                    rarityEl.textContent = rarityText;
+                    // --- END V3.4 SHARD DISPLAY ---
+
+
+                    display.className = `display-area ${result.class}`;
+
+                    isRolling = false;
+                    getButton('roll-btn').disabled = false;
+                    if (isHighCostRoll) getButton('high-cost-roll-btn').disabled = false;
+
+                    // If auto-roll is active, do not re-enable manual buttons, just let the interval handle it
+                    if (autoRollInterval) {
+                        getButton('roll-btn').disabled = true;
+                    }
+
+                    // Update Inventory and Checklist after roll
+                    renderInventory();
+                    renderChecklist();
+                    updateCollectedCount();
+                    saveStats(); // Final save after successful roll/sell
+
+                }
+            }, rollInterval);
+
+        }
+
+        // --- AUTO-ROLL FUNCTIONS (FIXED) ---
+        function toggleAutoRoll() {
+            const btn = getButton('auto-roll-btn');
+            if (autoRollInterval) {
+                // Stop auto-roll
+                clearInterval(autoRollInterval);
+                autoRollInterval = null;
+                btn.textContent = "AUTO ROLL";
+                btn.classList.remove('active-sell'); // Use this for background color reset
+                getButton('roll-btn').disabled = false;
+                getButton('display-area').classList.remove('auto-flash');
+
+                // Save state
+                localStorage.setItem(AUTO_SELL_KEY, 'false');
+            } else {
+                // Start auto-roll
+
+                // 1. Setup the constant loop interval
+                autoRollInterval = setInterval(() => {
+                    // Check if a roll is currently in progress before rolling again
+                    if (!isRolling) {
+                        rollAura(true);
+                    }
+                }, autoRollSpeed);
+
+                // 2. Update visuals
+                btn.textContent = `AUTO ROLLING (${autoRollSpeed}ms)`;
+                btn.classList.add('active-sell');
+                getButton('roll-btn').disabled = true;
+                getButton('display-area').classList.add('auto-flash');
+
+                // 3. Trigger the first roll immediately
+                if (!isRolling) {
+                    rollAura(true);
+                }
+
+                // Save state
+                localStorage.setItem(AUTO_SELL_KEY, 'true');
+            }
+        }
+
+        // --- BOOST / LUCK FUNCTIONS ---
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes}m ${remainingSeconds}s`;
+        }
+
+        function updateLuckDisplay() {
+            const luckDisplay = getButton('luck-display');
+            const totalLuck = calculateTotalLuck();
+            let text = `${totalLuck.toFixed(1)}x`;
+
+            if (luckMultiplier > 1) {
+                text += ` (+${luckMultiplier}x Temp - ${rollsLeft} rolls)`;
+                luckDisplay.style.color = '#ffc107'; // Yellow for active luck
+            } else {
+                luckDisplay.style.color = 'var(--accent-blue)'; // Back to accent
+            }
+
+            luckDisplay.textContent = text;
+            renderLuckShop();
+        }
+
+        function activateBoost(multiplier) {
+            const buttonId = boostButtons.find(b => b.mult === multiplier).id;
+            const boost = boostButtons.find(b => b.mult === multiplier);
+            const cooldownDuration = boost.cooldown || boost.duration; // Use 'cooldown' if defined, else 'duration'
+
+            if (cooldowns[buttonId] > 0) {
+                alert(`Boost is currently on cooldown! Remaining: ${formatTime(cooldowns[buttonId])}`);
+                return;
+            }
+
+            if (money < boost.cost) {
+                alert(`You need 💰${formatNumber(boost.cost)} to purchase this boost!`);
+                return;
+            }
+
+            // Deduct cost and apply boost
+            money -= boost.cost;
+            luckMultiplier = multiplier;
+            rollsLeft = boost.duration;
+            cooldowns[buttonId] = cooldownDuration;
+
+            // Start the cooldown timer
+            startCooldown(buttonId, cooldownDuration, cooldownDuration);
+
+            saveBoostState();
+            updateMoneyDisplay();
+            updateLuckDisplay();
+        }
+
+        // Timer logic for boost buttons
+        function startCooldown(buttonId, remainingDuration, totalDuration) {
+            const btn = getButton(buttonId);
+            const boost = boostButtons.find(b => b.id === buttonId);
+
+            if (cooldownTimers[buttonId]) {
+                clearInterval(cooldownTimers[buttonId]);
+            }
+
+            // Ensure the button is visually disabled and text shows countdown
+            btn.classList.add('disabled-boost');
+            btn.textContent = `${boost.name} (CD: ${formatTime(remainingDuration)})`;
+
+            let remaining = remainingDuration;
+            cooldowns[buttonId] = remaining;
+
+            const timer = setInterval(() => {
+                remaining--;
+                cooldowns[buttonId] = remaining;
+
+                if (remaining <= 0) {
+                    clearInterval(timer);
+                    delete cooldownTimers[buttonId];
+                    cooldowns[buttonId] = 0;
+
+                    // Reset button state
+                    btn.classList.remove('disabled-boost');
+                    btn.textContent = `${boost.name}\n(Cost: 💰${formatNumber(boost.cost)})`;
+
+                } else {
+                    btn.textContent = `${boost.name} (CD: ${formatTime(remaining)})`;
+                }
+
+                saveBoostState();
+                renderLuckShop(); // Ensure the shop updates correctly
+
+            }, 1000);
+
+            cooldownTimers[buttonId] = timer; // Store the interval ID
+        }
+
+        // --- SHOP RENDERERS ---
+
+        function renderLuckShop() {
+            boostButtons.forEach(boost => {
+                const btn = getButton(boost.id);
+                if (btn) {
+                    const cooldownDuration = boost.cooldown || boost.duration;
+                    const rollsText = boost.duration === 1 ? '1 roll' : `${boost.duration} rolls`;
+
+                    // Check if the boost is active
+                    if (luckMultiplier === boost.mult && rollsLeft > 0) {
+                        btn.classList.add('active-boost');
+                        btn.textContent = `ACTIVE (${rollsLeft} rolls left)`;
+                        btn.disabled = true;
+                        btn.style.boxShadow = '0 0 10px #ffc107'; // Add active visual shadow
+                    } else if (cooldowns[boost.id] > 0) {
+                        // Cooldown is running (handled by startCooldown, but ensure correct class is set)
+                        btn.classList.add('disabled-boost');
+                        btn.classList.remove('active-boost');
+                        btn.disabled = true;
+                    } else if (money < boost.cost) {
+                        // Not active, no cooldown, but insufficient funds
+                        btn.classList.add('disabled-boost');
+                        btn.classList.remove('active-boost');
+                        btn.textContent = `${boost.name} (${rollsText} / CD: ${formatTime(cooldownDuration)}) \n(Cost: 💰${formatNumber(boost.cost)})`;
+                        btn.disabled = true;
+                    }
+                    else {
+                        // Available to purchase
+                        btn.classList.remove('disabled-boost');
+                        btn.classList.remove('active-boost');
+                        btn.textContent = `${boost.name} (${rollsText} / CD: ${formatTime(cooldownDuration)}) \n(Cost: 💰${formatNumber(boost.cost)})`;
+                        btn.disabled = false;
+                        btn.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.4)'; // Restore default shadow
+                    }
+                }
+            });
+        }
+
+        function renderLootShop() {
+            // Mystery Box Button
+            const mysteryBtn = getButton('mystery-btn');
+            const mysteryCost = 50000;
+            if (money < mysteryCost) {
+                mysteryBtn.classList.add('disabled-boost');
+                mysteryBtn.disabled = true;
+                mysteryBtn.textContent = `MYSTERY BOX<br>(Cost: 💰${formatNumber(mysteryCost)})`;
+            } else {
+                mysteryBtn.classList.remove('disabled-boost');
+                mysteryBtn.disabled = false;
+                mysteryBtn.textContent = `MYSTERY BOX<br>(Cost: 💰${formatNumber(mysteryCost)})`;
+            }
+
+            // High Cost Roll Button (V3)
+            const highCostBtn = getButton('high-cost-roll-btn');
+            const highCostRollCost = 100000;
+            if (money < highCostRollCost) {
+                highCostBtn.classList.add('disabled-boost');
+                highCostBtn.disabled = true;
+                highCostBtn.textContent = `ULTIMATE ROLL<br>(Cost: 💰${formatNumber(highCostRollCost)})`;
+            } else {
+                highCostBtn.classList.remove('disabled-boost');
+                highCostBtn.disabled = false;
+                highCostBtn.textContent = `ULTIMATE ROLL<br>(Cost: 💰${formatNumber(highCostRollCost)})`;
+            }
+        }
+
+        function openMysteryBox() {
+            const cost = 50000;
+            if (money < cost) {
+                alert(`You need 💰${formatNumber(cost)} for the Mystery Box!`);
+                return;
+            }
+
+            money -= cost;
+            saveStats();
+            updateMoneyDisplay();
+
+            // The mystery box is essentially a guaranteed roll of Legendary or better.
+            const totalLuck = calculateTotalLuck();
+            const rollValue = Math.random() * 1000;
+
+            // Filter for high-tier auras (Legendary or better)
+            const highTierAuras = auras.filter(a => RARITY_MAP[a.rarity] >= RARITY_MAP['LEGENDARY']);
+            const sortedHighTierAuras = [...highTierAuras].sort((a, b) => b.chance - a.chance);
+
+            let result = sortedHighTierAuras[0];
+
+            for (let aura of sortedHighTierAuras) {
+                let threshold = (1000 / aura.chance) * totalLuck * 1.5; // 1.5x luck bonus on top
+
+                if (rollValue <= threshold) {
+                    result = aura;
+                    break;
+                }
+            }
+
+            // Immediately sell the item (it's a money sink)
+            const coinGain = Math.floor(result.value * powerMultiplier * auraSellMultiplier);
+            const shardGain = result.shardValue * shardMultiplier;
+
+            money += coinGain;
+            shards += shardGain;
+
+            saveAuraToCollection(result.name);
+            saveStats();
+
+            // Display the result
+            const display = getButton('display-area');
+            const nameEl = getButton('aura-name');
+            const rarityEl = getButton('aura-rarity');
+            
+            // --- V3.4: SHARD DISPLAY FOR MYSTERY BOX ---
+            let rarityText = `${result.rarity} - 💰${formatNumber(coinGain)}`;
+            if (shardGain > 0) {
+                rarityText += ` / 💎${formatNumber(shardGain)}`;
+            }
+
+            nameEl.textContent = `${result.name} (BOX)`;
+            rarityEl.textContent = rarityText;
+            display.className = `display-area ${result.class}`;
+
+            renderChecklist();
+            updateCollectedCount();
+            updateMoneyDisplay();
+
+            setTimeout(() => {
+                nameEl.textContent = `???`;
+                rarityEl.textContent = `Click button to roll`;
+                display.className = `display-area`;
+            }, 3000);
+        }
+
+        function renderSpeedShop() {
+            const container = getButton('speed-upgrades');
+            container.innerHTML = '';
+            getButton('speed-level-display').textContent = `(Level ${speedLevel})`;
+
+            speedUpgrades.forEach(upgrade => {
+                const btn = document.createElement('button');
+                btn.className = 'upgrade-btn';
+
+                if (speedLevel >= upgrade.id) {
+                    // Already purchased
+                    btn.classList.add('purchased-upgrade');
+                    btn.textContent = `${upgrade.label} - PURCHASED`;
+                    btn.disabled = true;
+                } else if (speedLevel === upgrade.id - 1) {
+                    // Next upgrade available
+                    btn.textContent = `${upgrade.label}\n(Cost: 💰${formatNumber(upgrade.cost)})`;
+                    btn.onclick = () => buySpeedUpgrade(upgrade.id, upgrade.cost, upgrade.speed);
+                    if (money < upgrade.cost) {
+                        btn.disabled = true;
+                        btn.style.opacity = 0.7;
+                    }
+                } else {
+                    // Locked (requires previous purchase)
+                    btn.textContent = `${upgrade.label}\n(Requires Level ${upgrade.id - 1})`;
+                    btn.disabled = true;
+                    btn.style.opacity = 0.5;
+                }
+
+                container.appendChild(btn);
+            });
+        }
+
+        function buySpeedUpgrade(id, cost, newSpeed) {
+            if (money < cost) {
+                alert(`You need 💰${formatNumber(cost)} to buy this upgrade.`);
+                return;
+            }
+
+            money -= cost;
+            autoRollSpeed = newSpeed;
+            speedLevel = id;
+
+            saveStats(); // Saves speedLevel and autoRollSpeed
+            updateMoneyDisplay();
+            renderSpeedShop();
+
+            // If auto-roll is active, restart it with the new speed
+            if (autoRollInterval) {
+                // Stop old interval
+                clearInterval(autoRollInterval);
+
+                // Set new interval
+                autoRollInterval = setInterval(() => {
+                    if (!isRolling) {
+                        rollAura(true);
+                    }
+                }, autoRollSpeed);
+
+                // Update button text to reflect new speed
+                getButton('auto-roll-btn').textContent = `AUTO ROLLING (${autoRollSpeed}ms)`;
+            }
+        }
+
+        function renderPowerShop() {
+            // Update Shard Multiplier Status
+            const shardMultStatus = getButton('shard-mult-status');
+            shardMultStatus.textContent = `Current Multiplier: ${shardMultiplier}x`;
+            getButton('shard-mult-cost-display').textContent = formatNumber(shardMultiplier * 10);
+
+            // Update Permanent Luck Status
+            const permLuckStatus = getButton('permanent-luck-status');
+            permLuckStatus.textContent = `Current Bonus: +${permanentBaseLuck.toFixed(1)}x`;
+            const permLuckLevel = Math.round(permanentBaseLuck * 10);
+            getButton('perm-luck-cost-display').textContent = formatNumber(BASE_PERM_LUCK_COST * (permLuckLevel + 1));
+
+
+            // Update Aura Sell Multiplier Status
+            const sellMultStatus = getButton('aura-sell-mult-status');
+            sellMultStatus.textContent = `Current Multiplier: ${auraSellMultiplier.toFixed(1)}x`;
+            const sellMultLevel = Math.round((auraSellMultiplier - 1.0) * 5);
+            getButton('sell-mult-cost-display').textContent = formatNumber(BASE_SELL_MULT_COST * (sellMultLevel + 1));
+
+            // Update Rare Bonus Luck Status
+            const rareChanceStatus = getButton('rare-chance-status');
+            rareChanceStatus.textContent = `Bonus: +${rareBonusLuck.toFixed(1)}x (Rare/Uncommon chance)`;
+            const rareChanceLevel = Math.round(rareBonusLuck * 10);
+            getButton('rare-chance-cost-display').textContent = formatNumber(50 * (rareChanceLevel + 1));
+
+
+            // Handle Auto-Sell Tier Control buttons
+            const autoSellTierBtn = getButton('auto-sell-tier-btn');
+            const autoSellToggleBtn = getButton('auto-sell-toggle-rarity-btn');
+            const autoSellTierStatus = getButton('auto-sell-tier-status');
+
+            if (isAutoSellTierUnlocked) {
+                autoSellTierBtn.classList.add('purchased-upgrade');
+                autoSellTierBtn.textContent = `Auto-Sell Tier Control (T1) - PURCHASED`;
+                autoSellTierBtn.disabled = true;
+                if (autoSellToggleBtn) autoSellToggleBtn.disabled = false;
+            } else if (shards < AUTO_SELL_TIER_COST) {
+                autoSellTierBtn.disabled = true;
+            } else {
+                autoSellTierBtn.disabled = false;
+            }
+
+            // Update the status display for auto-sell tiers
+            let tierLabel = 'Tier 1 Unlocked';
+            if (isAutoSellTier2Unlocked) tierLabel = 'Tier 2 Unlocked';
+            else if (!isAutoSellTierUnlocked) tierLabel = 'Unpurchased';
+
+            const currentSetting = AUTO_SELL_RARITY_TIERS[autoSellRarityTier].label;
+            autoSellTierStatus.textContent = `Status: ${tierLabel} / Current Setting: ${currentSetting}`;
+
+
+            // Handle Auto-Sell Tier 2 Upgrade Button (V3)
+            const autoSellTier2Btn = getButton('auto-sell-tier-2-btn');
+            if (isAutoSellTier2Unlocked) {
+                autoSellTier2Btn.classList.add('purchased-upgrade');
+                autoSellTier2Btn.textContent = `Auto-Sell Tier 2 - PURCHASED`;
+                autoSellTier2Btn.disabled = true;
+                // If T2 is purchased, ensure the toggle button is enabled even if T1 was skipped (for old saves)
+                if (!isAutoSellTierUnlocked && autoSellToggleBtn) autoSellToggleBtn.disabled = false;
+            } else if (!isAutoSellTierUnlocked) {
+                // Tier 2 requires Tier 1 to be purchased first (although technically you could buy T2 if T1 was cheap)
+                autoSellTier2Btn.disabled = true;
+                autoSellTier2Btn.style.opacity = 0.5;
+                getButton('auto-sell-tier-2-status').textContent = `Status: Requires Tier 1 Upgrade`;
+            } else if (shards < AUTO_SELL_TIER_2_COST) {
+                autoSellTier2Btn.disabled = true;
+                getButton('auto-sell-tier-2-status').textContent = `Status: Available (Unlock 4 Tiers)`;
+            } else {
+                autoSellTier2Btn.disabled = false;
+                getButton('auto-sell-tier-2-status').textContent = `Status: Available (Unlock 4 Tiers)`;
+            }
+
+
+            // Handle Pocket Change Upgrades
+            const startT1Btn = getButton('rebirth-start-1-btn');
+            const startT2Btn = getButton('rebirth-start-2-btn');
+
+            if (rebirthStartT1Purchased) {
+                startT1Btn.classList.add('purchased-upgrade');
+                startT1Btn.textContent = 'Pocket Change T1 - PURCHASED';
+                startT1Btn.disabled = true;
+                getButton('rebirth-start-1-status').textContent = `Status: Purchased (+💰2,500 on Rebirth)`;
+            } else if (shards < 25) {
+                startT1Btn.disabled = true;
+            } else {
+                startT1Btn.disabled = false;
+            }
+
+            if (rebirthStartT2Purchased) {
+                startT2Btn.classList.add('purchased-upgrade');
+                startT2Btn.textContent = 'Pocket Change T2 - PURCHASED';
+                startT2Btn.disabled = true;
+                getButton('rebirth-start-2-status').textContent = `Status: Purchased (+💰10,000 on Rebirth)`;
+            } else if (!rebirthStartT1Purchased) {
+                startT2Btn.disabled = true;
+                startT2Btn.style.opacity = 0.5;
+                getButton('rebirth-start-2-status').textContent = `Status: Requires Pocket Change T1`;
+            } else if (shards < 75) {
+                startT2Btn.disabled = true;
+            } else {
+                startT2Btn.disabled = false;
+            }
+        }
+
+        function buyShardUpgrade(upgradeType) {
+            let cost = 0;
+            let currentLevel = 0;
+            // Removed maxLevel variable check
+
+            switch (upgradeType) {
+                case 'shard-mult':
+                    cost = shardMultiplier * 10;
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy this shard multiplier upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    shardMultiplier++;
+                    break;
+
+                case 'permanent-luck':
+                    currentLevel = Math.round(permanentBaseLuck * 10); 
+                    cost = BASE_PERM_LUCK_COST * (currentLevel + 1);
+
+                    // Removed max level check here
+
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy this permanent luck upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    permanentBaseLuck += 0.1;
+                    break;
+
+                case 'aura-sell-mult':
+                    currentLevel = Math.round((auraSellMultiplier - 1.0) * 5); 
+                    cost = BASE_SELL_MULT_COST * (currentLevel + 1);
+
+                    // Removed max level check here
+
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy this sell multiplier upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    auraSellMultiplier += 0.2;
+                    break;
+
+                case 'rare-chance':
+                    currentLevel = Math.round(rareBonusLuck * 10); 
+                    cost = 50 * (currentLevel + 1);
+
+                    // Removed max level check here
+
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy the sharp senses upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    rareBonusLuck += 0.1;
+                    break;
+
+                case 'rebirth-start-1':
+                    cost = 25;
+                    if (rebirthStartT1Purchased) return;
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy this upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    rebirthStartT1Purchased = true;
+                    rebirthStartMoney = 2500;
+                    break;
+
+                case 'rebirth-start-2':
+                    cost = 75;
+                    if (rebirthStartT2Purchased || !rebirthStartT1Purchased) return;
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy this upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    rebirthStartT2Purchased = true;
+                    rebirthStartMoney = 10000;
+                    break;
+
+                case 'auto-sell-tier':
+                    cost = AUTO_SELL_TIER_COST;
+                    if (isAutoSellTierUnlocked) return;
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy this upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    isAutoSellTierUnlocked = true;
+                    // Automatically set to TIER_1 on purchase
+                    if (autoSellRarityTier === 'TIER_ALL') {
+                        autoSellRarityTier = 'TIER_0';
+                    }
+                    break;
+
+                case 'auto-sell-tier-2':
+                    cost = AUTO_SELL_TIER_2_COST;
+                    if (isAutoSellTier2Unlocked) return;
+                    if (!isAutoSellTierUnlocked) {
+                         alert(`You must first purchase the Auto-Sell Tier Control (T1) upgrade.`);
+                         return;
+                    }
+                    if (shards < cost) {
+                        alert(`You need 💎${formatNumber(cost)} to buy this upgrade.`);
+                        return;
+                    }
+                    shards -= cost;
+                    isAutoSellTier2Unlocked = true;
+                    break;
+
+                default:
+                    return;
+            }
+
+            // After a purchase, save and refresh displays
+            saveStats();
+            updateMoneyDisplay();
+            renderPowerShop(); // Rerenders the shop grid
+        }
+
+        // --- REBIRTH FUNCTIONS ---
+
+        function calculatePowerMultiplier() {
+            // Power multiplier: 1 + (power * 0.02)
+            powerMultiplier = 1 + (power * (POWER_BONUS / 100));
+        }
+
+        function getRebirthCost() {
+            // Cost is exponential with base 1,000,000
+            if (power === 0) return BASE_REBIRTH_COST;
+            return BASE_REBIRTH_COST * Math.pow(2, power);
+        }
+
+        function updateRebirthDisplay() {
+            const cost = getRebirthCost();
+            const costDisplay = getButton('rebirth-cost-display');
+            const rebirthBtn = getButton('rebirth-btn');
+            
+            // Check if elements exist before trying to update them
+            if (!costDisplay || !rebirthBtn) {
+                return;
+            }
+
+            costDisplay.textContent = `Reach 💰${formatNumber(cost)} to Rebirth.`;
+
+            if (money >= cost) {
+                rebirthBtn.disabled = false;
+                rebirthBtn.textContent = `REBIRTH (Gain 1 Power)`;
+            } else {
+                rebirthBtn.disabled = true;
+                rebirthBtn.textContent = `REBIRTH (Need 💰${formatNumber(cost - money)} more)`;
+            }
+        }
+
+        function doRebirth() {
+            const cost = getRebirthCost();
+            if (money < cost) return;
+
+            // 1. Calculate and apply rewards
+            power++;
+            calculatePowerMultiplier();
+
+            // 2. Reset relevant variables
+            money = rebirthStartMoney; // Reset money to base or T1/T2 starting amount
+            inventory = []; // Clear inventory
+            luckMultiplier = 1;
+            rollsLeft = 0;
+            // Reset cooldowns instantly upon Rebirth (allows immediate boosting)
+            boostButtons.forEach(b => {
+                cooldowns[b.id] = 0;
+                if (cooldownTimers[b.id]) {
+                    clearInterval(cooldownTimers[b.id]);
+                    delete cooldownTimers[b.id];
+                }
+            });
+
+            // 3. Save new state
+            savePower();
+            saveStats();
+            saveInventory();
+            saveBoostState();
+
+            // 4. Update UI
+            updateMoneyDisplay();
+            updateRebirthDisplay();
+            renderInventory();
+            renderLuckShop();
+            renderLeaderBoard(); // Update Leader Board after Rebirth
+
+            alert(`Rebirth successful! You gained 1 Power. Your income multiplier is now ${powerMultiplier.toFixed(2)}x.`);
+        }
+
+        // --- COLLECTION / CHECKLIST ---
+
+        function loadCollection() {
+            const storedCollection = localStorage.getItem(COLLECTION_STORAGE_KEY);
+            if (storedCollection) {
+                try {
+                    collectedAuras = new Set(JSON.parse(storedCollection));
+                } catch (e) {
+                    collectedAuras = new Set();
+                }
+            }
+        }
+
+        function saveCollection() {
+            localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(Array.from(collectedAuras)));
+        }
+
+        function saveAuraToCollection(auraName) {
+            collectedAuras.add(auraName);
+            saveCollection();
+        }
+
+        function renderChecklist() {
+            const container = getButton('uncollected-list');
+            container.innerHTML = '';
+
+            const allAuras = [...auras, ...limitedAuras].sort((a, b) => RARITY_MAP[a.rarity] - RARITY_MAP[b.rarity] || a.name.localeCompare(b.name));
+
+            allAuras.forEach(aura => {
+                const item = document.createElement('div');
+                const isCollected = collectedAuras.has(aura.name);
+                item.className = `uncollected-item ${aura.class} ${isCollected ? 'collected-item' : ''}`;
+                item.innerHTML = `
+                    <span class="${isCollected ? 'text-decoration-line-through' : ''}">${aura.name}</span>
+                    <span style="float: right;" class="${isCollected ? '' : aura.class}">${aura.rarity}</span>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+
+        // --- INVENTORY FUNCTIONS ---
+
+        function renderInventory() {
+            const container = getButton('inventory-list');
+            // Only re-render if the inventory tab is active to save resources
+            if (activeTabName !== 'inventory-tab' && container.childElementCount > 0) return;
+
+            container.innerHTML = '';
+
+            // Group inventory items by name and count them
+            const groupedInventory = inventory.reduce((acc, item) => {
+                const key = item.name;
+                if (!acc[key]) {
+                    acc[key] = { count: 0, details: item };
+                }
+                acc[key].count++;
+                return acc;
+            }, {});
+
+            // Sort by rarity (descending) then by name
+            const sortedKeys = Object.keys(groupedInventory).sort((a, b) => {
+                const rarityA = RARITY_MAP[groupedInventory[a].details.rarity];
+                const rarityB = RARITY_MAP[groupedInventory[b].details.rarity];
+                if (rarityA !== rarityB) {
+                    return rarityB - rarityA; // Sort higher rarity first
+                }
+                return a.localeCompare(b); // Sort by name second
+            });
+
+            sortedKeys.forEach(key => {
+                const item = groupedInventory[key];
+                const itemDetails = item.details;
+                const totalValue = Math.floor(itemDetails.value * item.count * powerMultiplier * auraSellMultiplier);
+                const totalShards = itemDetails.shardValue * item.count * shardMultiplier;
+
+                const element = document.createElement('div');
+                element.className = `inv-item ${itemDetails.class}`;
+                element.innerHTML = `
+                    <p style="font-weight: bold; margin-bottom: 5px;">${itemDetails.name}</p>
+                    <p>Count: <span style="font-weight: bold; color: var(--accent-green);">${item.count.toLocaleString()}</span></p>
+                    <p style="font-size: 0.85em;">Value: 💰${formatNumber(totalValue)}</p>
+                    <button class="inventory-btn" onclick="sellItem('${key}')">SELL</button>
+                `;
+                container.appendChild(element);
+            });
+
+            getButton('sell-all-btn').textContent = `SELL ALL ITEMS (${inventory.length})`;
+            if (inventory.length === 0) {
+                getButton('sell-all-btn').disabled = true;
+                if (activeTabName === 'inventory-tab') {
+                    container.textContent = 'Inventory is empty.';
+                }
+            } else {
+                getButton('sell-all-btn').disabled = false;
+            }
+        }
+
+        function sellItem(name) {
+            const itemsToSell = inventory.filter(item => item.name === name);
+            if (itemsToSell.length === 0) return;
+
+            let totalValue = 0;
+            let totalShards = 0;
+
+            itemsToSell.forEach(item => {
+                totalValue += Math.floor(item.value * powerMultiplier * auraSellMultiplier);
+                totalShards += (item.shardValue * shardMultiplier);
+            });
+
+            // Remove items from inventory
+            inventory = inventory.filter(item => item.name !== name);
+
+            // Add rewards
+            money += totalValue;
+            shards += totalShards;
+
+            saveInventory();
+            saveStats();
+            updateMoneyDisplay();
+            renderInventory();
+        }
+
+        function sellAllItems() {
+            if (inventory.length === 0) return;
+
+            let totalValue = 0;
+            let totalShards = 0;
+
+            inventory.forEach(item => {
+                totalValue += Math.floor(item.value * powerMultiplier * auraSellMultiplier);
+                totalShards += (item.shardValue * shardMultiplier);
+            });
+
+            // Reset inventory and apply rewards
+            inventory = [];
+            money += totalValue;
+            shards += totalShards;
+
+            saveInventory();
+            saveStats();
+            updateMoneyDisplay();
+            renderInventory();
+
+            alert(`Sold all items! Gained 💰${formatNumber(totalValue)} and 💎${formatNumber(totalShards)}.`);
+        }
+
+        function updateAutoSellButton() {
+            const btn = getButton('auto-sell-btn');
+            const toggleRarityBtn = getButton('auto-sell-toggle-rarity-btn');
+
+            if (isAutoSelling) {
+                btn.classList.add('active-sell');
+                btn.textContent = `AUTO SELL: ON (Set to ${AUTO_SELL_RARITY_TIERS[autoSellRarityTier].label})`;
+            } else {
+                btn.classList.remove('active-sell');
+                btn.textContent = `AUTO SELL: OFF`;
+            }
+
+            // Enable rarity button only if T1 or T2 is unlocked
+            if (isAutoSellTierUnlocked || isAutoSellTier2Unlocked) {
+                toggleRarityBtn.disabled = false;
+                toggleRarityBtn.textContent = `Change Rarity Tier (${AUTO_SELL_RARITY_TIERS[autoSellRarityTier].label})`;
+            } else {
+                toggleRarityBtn.disabled = true;
+                toggleRarityBtn.textContent = `Requires T1/T2 Upgrade`;
+            }
+        }
+
+        function toggleAutoSell() {
+            isAutoSelling = !isAutoSelling;
+
+            // If toggled ON for the first time, and tiers are unlocked, make sure a tier other than ALL is selected.
+            if (isAutoSelling && isAutoSellTierUnlocked && autoSellRarityTier === 'TIER_ALL') {
+                 // Default to selling only Common if T1 is unlocked
+                autoSellRarityTier = 'TIER_0';
+            }
+
+            saveStats();
+            updateAutoSellButton();
+        }
+
+        function toggleAutoSellRarity() {
+            // Define the sequence of tiers based on unlocked features
+            const tierSequence = ['TIER_ALL', 'TIER_0', 'TIER_1'];
+            if (isAutoSellTier2Unlocked) {
+                tierSequence.push('TIER_2', 'TIER_3', 'TIER_4');
+            }
+
+            let currentIndex = tierSequence.indexOf(autoSellRarityTier);
+            let nextIndex = (currentIndex + 1) % tierSequence.length;
+
+            // If T1 is unlocked but T2 is not, ensure we don't land on tiers T2, T3, T4
+            if (isAutoSellTierUnlocked && !isAutoSellTier2Unlocked) {
+                 while (nextIndex > tierSequence.indexOf('TIER_1')) {
+                    nextIndex = (nextIndex + 1) % tierSequence.length;
+                }
+            }
+
+
+            autoSellRarityTier = tierSequence[nextIndex];
+            saveStats();
+            updateAutoSellButton();
+        }
+
+        // --- NEW V3.5: LEADER BOARD FUNCTIONS ---
+
+        function renderLeaderBoard() {
+            const container = getButton('leaderboard-list');
+            if (!container) return; // Exit if the element doesn't exist
+
+            // Only re-render the list if the leaderboard tab is open
+            if (activeTabName !== 'leaderboard-tab') return;
+            
+            container.innerHTML = '';
+
+            // 1. Combine player score with dummy scores
+            const allScores = [...DUMMY_PLAYERS];
+            
+            // Add the current player's score
+            allScores.push({ name: username, money: money });
+
+            // 2. Sort all scores by money (descending)
+            allScores.sort((a, b) => b.money - a.money);
+
+            // 3. Render the top 10
+            const topTen = allScores.slice(0, 10);
+
+            topTen.forEach((score, index) => {
+                const rank = index + 1;
+                const listItem = document.createElement('li');
+                listItem.className = 'leaderboard-item';
+
+                // Highlight the player's entry
+                if (score.name === username && score.money === money) {
+                    listItem.classList.add('player-rank');
+                } else if (rank <= 3) {
+                    listItem.classList.add('top-rank');
+                }
+
+                const rankText = (rank <= 9) ? `0${rank}` : `${rank}`;
+
+                listItem.innerHTML = `
+                    <span>#${rankText} &nbsp; ${score.name}</span>
+                    <span>💰${formatNumber(score.money)}</span>
+                `;
+
+                container.appendChild(listItem);
+            });
+        }
+        
+        // --- END LEADER BOARD FUNCTIONS ---
+
+
+        // --- TAB CONTROL ---
+
+        function openTab(tabName, elmnt) {
+            // Get all elements with class="tab-content" and hide them
+            const tabcontent = document.getElementsByClassName("tab-content");
+            for (let i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+                tabcontent[i].classList.remove('active');
+            }
+
+            // Get all elements with class="tab-button" and remove the "active" class
+            const tabbuttons = document.getElementsByClassName("tab-button");
+            for (let i = 0; i < tabbuttons.length; i++) {
+                tabbuttons[i].classList.remove("active");
+            }
+
+            // Show the current tab, and add an "active" class to the button that opened the tab
+            getButton(tabName).style.display = "block";
+            getButton(tabName).classList.add('active');
+            elmnt.classList.add("active");
+            activeTabName = tabName; // Update active tab global state
+
+            // Force refresh of the necessary content when opening tabs
+            if (tabName === 'inventory-tab') renderInventory();
+            if (tabName === 'checklist-tab') renderChecklist();
+            if (tabName === 'rebirth-tab') updateRebirthDisplay(); 
+            if (tabName === 'luck-shop') renderLuckShop();
+            if (tabName === 'speed-shop') renderSpeedShop();
+            if (tabName === 'power-shop') renderPowerShop();
+            if (tabName === 'loot-shop') renderLootShop();
+            if (tabName === 'leaderboard-tab') renderLeaderBoard(); // Immediate refresh on opening
+        }
+
+        // --- DANGER ZONE ---
+        function resetGame() {
+            if (confirm("ARE YOU ABSOLUTELY SURE you want to permanently delete ALL your game progress?")) {
+                if (confirm("FINAL WARNING: This action cannot be undone. Click OK to erase all data.")) {
+                    // Clear all data keys associated with this version
+                    localStorage.removeItem(USERNAME_STORAGE_KEY); // V3.5
+                    localStorage.removeItem(MONEY_STORAGE_KEY);
+                    localStorage.removeItem(SHARDS_STORAGE_KEY);
+                    localStorage.removeItem(SHARD_MULT_STORAGE_KEY);
+                    localStorage.removeItem(REBIRTH_START_T1_KEY);
+                    localStorage.removeItem(REBIRTH_START_T2_KEY);
+                    localStorage.removeItem(RARE_BONUS_KEY);
+                    localStorage.removeItem(PERMANENT_LUCK_KEY);
+                    localStorage.removeItem(AURA_SELL_MULT_KEY);
+
+                    localStorage.removeItem(AUTO_SELL_TIER_UNLOCK_KEY);
+                    localStorage.removeItem(AUTO_SELL_TIER_2_UNLOCK_KEY);
+                    localStorage.removeItem(AUTO_SELL_RARITY_KEY);
+
+                    localStorage.removeItem(SPEED_STORAGE_KEY);
+                    localStorage.removeItem(POWER_STORAGE_KEY);
+                    localStorage.removeItem(COLLECTION_STORAGE_KEY);
+                    localStorage.removeItem(INVENTORY_STORAGE_KEY);
+                    localStorage.removeItem(LAST_SAVE_TIME_KEY);
+                    localStorage.removeItem(AUTO_SELL_KEY);
+                    localStorage.removeItem(LUCK_MULT_KEY);
+                    localStorage.removeItem(ROLLS_LEFT_KEY);
+                    localStorage.removeItem(COOLDOWNS_KEY);
+
+                    alert("Game data has been erased. Reloading the game now.");
+                    window.location.reload();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
